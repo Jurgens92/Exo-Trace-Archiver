@@ -105,27 +105,27 @@ export function SettingsPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <ConfigItem
               label="Tenant ID"
-              value={config.microsoft365.tenant_id}
+              value={config.legacy_microsoft365?.tenant_id ?? 'Not configured'}
             />
             <ConfigItem
               label="Client ID"
-              value={config.microsoft365.client_id}
+              value={config.legacy_microsoft365?.client_id ?? 'Not configured'}
             />
             <ConfigItem
               label="Auth Method"
-              value={config.microsoft365.auth_method}
+              value={config.legacy_microsoft365?.auth_method ?? 'Not configured'}
             />
             <ConfigItem
               label="API Method"
-              value={config.microsoft365.api_method}
+              value={config.legacy_microsoft365?.api_method ?? 'Not configured'}
             />
             <ConfigItem
               label="Organization"
-              value={config.microsoft365.organization}
+              value={config.legacy_microsoft365?.organization ?? 'Not configured'}
             />
             <ConfigItem
               label="Certificate"
-              value={config.microsoft365.certificate_configured}
+              value={config.legacy_microsoft365?.certificate_configured ?? false}
               type="boolean"
             />
           </div>
