@@ -28,6 +28,8 @@ export interface MessageTraceLog {
   updated_at: string
   raw_json?: Record<string, unknown>
   duration_since_received?: string
+  tenant?: number
+  tenant_name?: string
 }
 
 // Trace status enum
@@ -65,6 +67,8 @@ export interface PullHistory {
   api_method: string
   duration_formatted: string | null
   created_at: string
+  tenant?: number
+  tenant_name?: string
 }
 
 // Pull status enum
@@ -89,10 +93,13 @@ export interface DashboardStats {
   outbound_count: number
   internal_count: number
   recent_pulls: PullHistory[]
+  tenant_count?: number
+  accessible_tenants?: { id: number; name: string }[]
 }
 
 // Manual pull request
 export interface ManualPullRequest {
+  tenant_id: number
   start_date?: string
   end_date?: string
 }
@@ -100,6 +107,8 @@ export interface ManualPullRequest {
 // Manual pull response
 export interface ManualPullResponse {
   message: string
+  tenant_id: number
+  tenant_name: string
   pull_history_id: number
   records_pulled: number
   records_new: number
@@ -110,7 +119,17 @@ export interface ManualPullResponse {
 
 // Config response
 export interface ConfigResponse {
-  microsoft365: {
+  multi_tenant: {
+    enabled: boolean
+    tenant_count: number
+    tenants: {
+      id: number
+      name: string
+      is_active: boolean
+      organization: string
+    }[]
+  }
+  legacy_microsoft365?: {
     tenant_id: string
     client_id: string
     auth_method: string
@@ -138,6 +157,129 @@ export interface AuthTokenResponse {
   token: string
 }
 
+// User roles
+export type UserRole = 'admin' | 'user'
+
+// User types
+export interface User {
+  id: number
+  username: string
+  email: string
+  first_name: string
+  last_name: string
+  is_active: boolean
+  date_joined: string
+  last_login: string | null
+  role: UserRole
+  is_admin: boolean
+  tenant_count?: number
+  tenant_permissions?: TenantPermissionInfo[]
+}
+
+export interface TenantPermissionInfo {
+  id: number
+  tenant_id: number
+  tenant_name: string
+  granted_at: string
+}
+
+export interface UserCreate {
+  username: string
+  email: string
+  password: string
+  password_confirm: string
+  first_name?: string
+  last_name?: string
+  role?: UserRole
+}
+
+export interface UserUpdate {
+  email?: string
+  first_name?: string
+  last_name?: string
+  is_active?: boolean
+  role?: UserRole
+  password?: string
+}
+
+// Tenant types
+export interface Tenant {
+  id: number
+  name: string
+  tenant_id: string
+  client_id?: string
+  client_id_masked?: string
+  organization: string
+  auth_method: 'certificate' | 'secret'
+  api_method: 'graph' | 'powershell'
+  certificate_path?: string
+  certificate_thumbprint?: string
+  has_client_secret?: boolean
+  has_certificate?: boolean
+  is_active: boolean
+  created_at: string
+  updated_at?: string
+  created_by?: number
+  created_by_username?: string
+  user_count?: number
+}
+
+export interface TenantCreate {
+  name: string
+  tenant_id: string
+  client_id: string
+  auth_method: 'certificate' | 'secret'
+  client_secret?: string
+  certificate_path?: string
+  certificate_thumbprint?: string
+  certificate_password?: string
+  api_method: 'graph' | 'powershell'
+  organization?: string
+  is_active?: boolean
+}
+
+export interface TenantUpdate {
+  name?: string
+  client_id?: string
+  auth_method?: 'certificate' | 'secret'
+  client_secret?: string
+  certificate_path?: string
+  certificate_thumbprint?: string
+  certificate_password?: string
+  api_method?: 'graph' | 'powershell'
+  organization?: string
+  is_active?: boolean
+}
+
+// Tenant permission types
+export interface TenantPermission {
+  id: number
+  user: number
+  user_username: string
+  user_email: string
+  tenant: number
+  tenant_name: string
+  granted_at: string
+  granted_by: number | null
+  granted_by_username: string | null
+}
+
+// Current user type (with accessible tenants)
+export interface CurrentUser {
+  id: number
+  username: string
+  email: string
+  first_name: string
+  last_name: string
+  role: UserRole
+  is_admin: boolean
+  accessible_tenants: {
+    id: number
+    name: string
+    organization: string
+  }[]
+}
+
 // Trace filter params
 export interface TraceFilterParams {
   search?: string
@@ -149,6 +291,7 @@ export interface TraceFilterParams {
   recipient_contains?: string
   status?: TraceStatus
   direction?: TraceDirection
+  tenant?: number
   page?: number
   page_size?: number
   ordering?: string

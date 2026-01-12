@@ -7,6 +7,8 @@ import { TraceDetailPage } from '@/pages/TraceDetailPage'
 import { PullHistoryPage } from '@/pages/PullHistoryPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { LoginPage } from '@/pages/LoginPage'
+import { UsersPage } from '@/pages/UsersPage'
+import { TenantsPage } from '@/pages/TenantsPage'
 import { AuthProvider, useAuth } from '@/hooks/useAuth'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -44,6 +46,8 @@ function App() {
           <Route path="traces" element={<TracesPage />} />
           <Route path="traces/:id" element={<TraceDetailPage />} />
           <Route path="pull-history" element={<PullHistoryPage />} />
+          <Route path="users" element={<UsersPage />} />
+          <Route path="tenants" element={<TenantsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Routes>

@@ -9,6 +9,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     # DRF token authentication endpoint
     path('api/auth/token/', obtain_auth_token, name='api_token_auth'),
+    # Accounts app API endpoints (users, tenants, permissions)
+    path('api/accounts/', include('accounts.urls')),
     # Traces app API endpoints
     path('api/', include('traces.urls')),
 ]

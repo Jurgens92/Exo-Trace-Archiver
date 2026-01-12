@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'django_filters',
     # Local apps
+    'accounts.apps.AccountsConfig',
     'traces.apps.TracesConfig',
 ]
 

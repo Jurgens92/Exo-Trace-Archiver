@@ -1,5 +1,5 @@
 /**
- * Authentication hook and context provider
+ * Authentication hook and context provider with user info
  */
 
 import {
@@ -9,13 +9,17 @@ import {
   useEffect,
   ReactNode,
 } from 'react'
-import { login as apiLogin, getAuthToken, setAuthToken, clearAuthToken } from '@/api'
+import { login as apiLogin, getAuthToken, setAuthToken, clearAuthToken, getCurrentUser } from '@/api'
+import type { CurrentUser } from '@/api'
 
 interface AuthContextType {
   isAuthenticated: boolean
   isLoading: boolean
+  user: CurrentUser | null
+  isAdmin: boolean
   login: (username: string, password: string) => Promise<void>
   logout: () => void
+  refreshUser: () => Promise<void>
   error: string | null
 }
 
@@ -24,15 +28,34 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [user, setUser] = useState<CurrentUser | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Check for existing token on mount
-  useEffect(() => {
-    const token = getAuthToken()
-    if (token) {
-      setIsAuthenticated(true)
+  const fetchUser = async () => {
+    try {
+      const userData = await getCurrentUser()
+      setUser(userData)
+      return userData
+    } catch {
+      // If fetching user fails, clear auth state
+      clearAuthToken()
+      setIsAuthenticated(false)
+      setUser(null)
+      return null
     }
-    setIsLoading(false)
+  }
+
+  // Check for existing token on mount and fetch user info
+  useEffect(() => {
+    const initAuth = async () => {
+      const token = getAuthToken()
+      if (token) {
+        setIsAuthenticated(true)
+        await fetchUser()
+      }
+      setIsLoading(false)
+    }
+    initAuth()
   }, [])
 
   const login = async (username: string, password: string) => {
@@ -43,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await apiLogin(username, password)
       setAuthToken(response.token)
       setIsAuthenticated(true)
+      await fetchUser()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed'
       setError(message)
@@ -55,11 +79,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     clearAuthToken()
     setIsAuthenticated(false)
+    setUser(null)
   }
+
+  const refreshUser = async () => {
+    await fetchUser()
+  }
+
+  const isAdmin = user?.is_admin ?? false
 
   return (
     <AuthContext.Provider
-      value={{ isAuthenticated, isLoading, login, logout, error }}
+      value={{ isAuthenticated, isLoading, user, isAdmin, login, logout, refreshUser, error }}
     >
       {children}
     </AuthContext.Provider>
