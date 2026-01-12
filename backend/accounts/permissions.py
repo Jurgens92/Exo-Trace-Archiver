@@ -111,7 +111,10 @@ def get_accessible_tenant_ids(user) -> list[int]:
     if not user or not user.is_authenticated:
         return []
 
-    # Admin users can access all tenants
+    # Superusers and admin role users can access all tenants
+    if user.is_superuser or user.is_staff:
+        return list(Tenant.objects.filter(is_active=True).values_list('id', flat=True))
+
     if hasattr(user, 'profile') and user.profile.is_admin:
         return list(Tenant.objects.filter(is_active=True).values_list('id', flat=True))
 
@@ -135,7 +138,11 @@ def user_is_admin(user) -> bool:
     if not user or not user.is_authenticated:
         return False
 
+    # Django superusers are always admins
+    if user.is_superuser or user.is_staff:
+        return True
+
     if hasattr(user, 'profile'):
         return user.profile.is_admin
 
-    return user.is_staff
+    return False
