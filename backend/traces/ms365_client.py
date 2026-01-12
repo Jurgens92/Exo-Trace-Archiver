@@ -157,10 +157,17 @@ class GraphAPIClient(BaseMS365Client):
         """Authenticate using certificate-based credentials."""
         cert_path = settings.MS365_CERTIFICATE_PATH
         cert_password = settings.MS365_CERTIFICATE_PASSWORD
+        cert_thumbprint = getattr(settings, 'MS365_CERTIFICATE_THUMBPRINT', None)
 
         if not cert_path:
             raise MS365AuthenticationError(
                 "MS365_CERTIFICATE_PATH not configured for certificate auth"
+            )
+
+        if not cert_thumbprint:
+            raise MS365AuthenticationError(
+                "MS365_CERTIFICATE_THUMBPRINT not configured for certificate auth. "
+                "The thumbprint is required for Graph API certificate authentication."
             )
 
         # Read certificate
@@ -190,7 +197,7 @@ class GraphAPIClient(BaseMS365Client):
             authority=authority,
             client_credential={
                 "private_key": private_key,
-                "thumbprint": settings.MS365_CERTIFICATE_THUMBPRINT,
+                "thumbprint": cert_thumbprint,
                 "passphrase": passphrase,
             }
         )
@@ -682,6 +689,12 @@ class TenantGraphAPIClient(GraphAPIClient):
         if not cert_path:
             raise MS365AuthenticationError(
                 f"Certificate path not configured for tenant: {self.tenant.name}"
+            )
+
+        if not cert_thumbprint:
+            raise MS365AuthenticationError(
+                f"Certificate thumbprint not configured for tenant: {self.tenant.name}. "
+                f"The thumbprint is required for Graph API certificate authentication."
             )
 
         cert_path_obj = Path(cert_path)
