@@ -417,8 +417,8 @@ class BulkTenantPermissionSerializer(serializers.Serializer):
 class CurrentUserSerializer(serializers.ModelSerializer):
     """Serializer for the current authenticated user."""
 
-    role = serializers.CharField(source='profile.role', read_only=True)
-    is_admin = serializers.BooleanField(source='profile.is_admin', read_only=True)
+    role = serializers.SerializerMethodField()
+    is_admin = serializers.SerializerMethodField()
     accessible_tenants = serializers.SerializerMethodField()
 
     class Meta:
@@ -428,9 +428,29 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             'role', 'is_admin', 'accessible_tenants'
         ]
 
+    def get_role(self, obj) -> str:
+        """Get user role, defaulting to admin for superusers."""
+        if obj.is_superuser or obj.is_staff:
+            return 'admin'
+        if hasattr(obj, 'profile'):
+            return obj.profile.role
+        return 'user'
+
+    def get_is_admin(self, obj) -> bool:
+        """Check if user is admin (superuser or admin role)."""
+        if obj.is_superuser or obj.is_staff:
+            return True
+        if hasattr(obj, 'profile'):
+            return obj.profile.is_admin
+        return False
+
     def get_accessible_tenants(self, obj) -> list:
         """Get list of tenants the user can access."""
-        if hasattr(obj, 'profile') and obj.profile.is_admin:
+        is_admin = obj.is_superuser or obj.is_staff or (
+            hasattr(obj, 'profile') and obj.profile.is_admin
+        )
+
+        if is_admin:
             # Admin users can access all active tenants
             tenants = Tenant.objects.filter(is_active=True)
         else:
