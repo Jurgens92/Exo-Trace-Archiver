@@ -252,8 +252,14 @@ class GraphAPIClient(BaseMS365Client):
             return pem_key.decode('utf-8')
 
         except ValueError as e:
+            error_msg = str(e)
+            if "deserialize" in error_msg.lower():
+                raise MS365AuthenticationError(
+                    f"Failed to load PFX certificate: Invalid password or corrupted file. "
+                    f"Check MS365_CERTIFICATE_PASSWORD in your settings."
+                )
             raise MS365AuthenticationError(
-                f"Failed to load certificate (wrong password?): {str(e)}"
+                f"Failed to load certificate (wrong password?): {error_msg}"
             )
         except Exception as e:
             raise MS365AuthenticationError(
@@ -690,6 +696,8 @@ class TenantGraphAPIClient(GraphAPIClient):
             passphrase = cert_password if cert_password else None
         else:
             # For PFX/P12 files, extract the private key using cryptography
+            has_password = bool(cert_password)
+            logger.debug(f"Loading PFX certificate for tenant {self.tenant.name}, password provided: {has_password}")
             private_key = self._load_pfx_private_key(
                 cert_path_obj,
                 cert_password.encode() if cert_password else None
@@ -763,8 +771,14 @@ class TenantGraphAPIClient(GraphAPIClient):
             return pem_key.decode('utf-8')
 
         except ValueError as e:
+            error_msg = str(e)
+            if "deserialize" in error_msg.lower():
+                raise MS365AuthenticationError(
+                    f"Failed to load PFX certificate: Invalid password or corrupted file. "
+                    f"Make sure the certificate password is correct in tenant settings."
+                )
             raise MS365AuthenticationError(
-                f"Failed to load certificate (wrong password?): {str(e)}"
+                f"Failed to load certificate (wrong password?): {error_msg}"
             )
         except Exception as e:
             raise MS365AuthenticationError(
