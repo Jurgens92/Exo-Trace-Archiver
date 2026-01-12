@@ -72,24 +72,52 @@ After adding permissions, click **Grant admin consent**.
 
 Certificate-based authentication is more secure for unattended/service scenarios.
 
-1. Generate a self-signed certificate:
-   ```bash
-   # Generate certificate (Linux/macOS)
-   openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes \
-     -subj "/CN=Exo-Trace-Archiver"
+**Windows (using included script):**
 
-   # Convert to PFX for Azure
-   openssl pkcs12 -export -out certificate.pfx -inkey key.pem -in cert.pem
-   ```
+A PowerShell script is included to generate certificates easily:
 
-2. Upload the certificate:
+```powershell
+# Run from the project root directory
+.\GenerateCert.ps1
+
+# Or customize the output
+.\GenerateCert.ps1 -OutputPath "C:\MyCerts" -CertName "MyApp" -Password "MyPassword123!"
+```
+
+This will generate:
+- `ExoTraceArchiver.cer` - Public certificate (upload to Azure AD)
+- `ExoTraceArchiver.pfx` - Private key + certificate (upload to Exo-Trace-Archiver)
+
+**Linux/macOS:**
+
+```bash
+# Generate certificate
+openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 730 -nodes \
+  -subj "/CN=ExoTraceArchiver"
+
+# Convert to PFX (you'll be prompted for a password)
+openssl pkcs12 -export -out ExoTraceArchiver.pfx -inkey key.pem -in cert.pem
+
+# Get the thumbprint
+openssl x509 -in cert.pem -noout -fingerprint -sha1 | sed 's/://g' | cut -d= -f2
+```
+
+**Upload certificates:**
+
+1. **Azure AD App Registration:**
    - Go to **Certificates & secrets** > **Certificates**
-   - Upload `cert.pem` or `certificate.pfx`
-   - Note the **Thumbprint**
+   - Upload the `.cer` file (public certificate)
+   - Note the **Thumbprint** displayed
 
-3. Record these values for `.env`:
-   - **Tenant ID**: From Overview page
-   - **Client ID**: From Overview page
+2. **Exo-Trace-Archiver (per tenant):**
+   - Go to **Admin** > **Tenants** > Edit tenant
+   - Upload the `.pfx` file
+   - Enter the **Certificate Thumbprint**
+   - Enter the **Certificate Password** (the one used when creating the PFX)
+
+3. Record these values:
+   - **Tenant ID**: From Azure AD Overview page
+   - **Client ID**: From Azure AD Overview page
    - **Certificate Thumbprint**: From Certificates & secrets
 
 #### Option B: Client Secret (Simpler but Less Secure)
@@ -361,6 +389,37 @@ The current implementation uses Django's built-in authentication. To add more so
 3. Implement role-based permissions
 4. Consider SSO integration with Azure AD
 
+## Multi-Tenant Configuration
+
+Exo-Trace-Archiver supports multiple Microsoft 365 tenants. Each tenant requires its own Azure AD app registration and certificate.
+
+### Adding a New Tenant
+
+1. **Create Azure AD App Registration** (see Step 1-3 above) in the target tenant
+2. **Generate a certificate** using `GenerateCert.ps1` (use a unique name per tenant)
+3. **Upload the `.cer`** to the Azure AD app registration
+4. **In Exo-Trace-Archiver:**
+   - Go to **Admin** > **Tenants** > **Add Tenant**
+   - Enter the tenant name, Tenant ID, and Client ID
+   - Select authentication method (Certificate recommended)
+   - Upload the `.pfx` file
+   - Enter the certificate thumbprint and password
+   - Click **Test Connection** to verify
+
+### Per-Tenant Settings
+
+| Field | Description |
+|-------|-------------|
+| Name | Display name for the tenant |
+| Tenant ID | Azure AD Directory (tenant) ID |
+| Client ID | Azure AD Application (client) ID |
+| Auth Method | Certificate or Client Secret |
+| Certificate | The `.pfx` file with private key |
+| Thumbprint | SHA-1 fingerprint of the certificate |
+| Password | Password used when creating the PFX |
+| API Method | Graph API (recommended) or PowerShell |
+| Organization | Exchange organization domain (for PowerShell) |
+
 ## Troubleshooting
 
 ### Common Issues
@@ -379,6 +438,36 @@ The current implementation uses Django's built-in authentication. To add more so
 - Ensure ExchangeOnlineManagement module is installed
 - Verify PowerShell 7 is available (`pwsh` command)
 - Check service principal has correct permissions
+
+### Certificate Issues
+
+**"Could not deserialize PKCS12 data":**
+- The certificate password is incorrect or missing
+- The PFX file may be corrupted
+- Verify the password in tenant settings matches the one used when creating the PFX
+
+**"Could not parse the provided public key":**
+- The certificate file format is not supported
+- Ensure you're uploading a `.pfx` file (not `.cer` or `.pem`)
+- The `cryptography` library may need to be installed: `pip install cryptography`
+
+**"Certificate file not found":**
+- The uploaded certificate file was deleted or moved
+- Re-upload the certificate in tenant settings
+
+**Verifying a PFX file (Windows):**
+```powershell
+# Test if the PFX can be loaded with the password
+certutil -dump "C:\path\to\certificate.pfx"
+# You'll be prompted for the password
+```
+
+**Verifying a PFX file (Linux/macOS):**
+```bash
+# Test if the PFX can be loaded
+openssl pkcs12 -info -in certificate.pfx -noout
+# Enter the password when prompted
+```
 
 ### Logs
 
