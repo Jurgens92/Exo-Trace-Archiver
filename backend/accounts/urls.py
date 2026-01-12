@@ -17,6 +17,7 @@ from .views import (
     TenantPermissionViewSet,
     CurrentUserView,
     AccessibleTenantsView,
+    CertificateUploadView,
 )
 
 # Create router for ViewSets
@@ -32,4 +33,7 @@ urlpatterns = [
     # Current user endpoints
     path('me/', CurrentUserView.as_view(), name='current-user'),
     path('me/tenants/', AccessibleTenantsView.as_view(), name='accessible-tenants'),
+
+    # Certificate upload
+    path('certificates/upload/', CertificateUploadView.as_view(), name='certificate-upload'),
 ]

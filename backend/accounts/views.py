@@ -6,12 +6,20 @@ Provides endpoints for:
 - Tenant CRUD (admin only)
 - Tenant permission management (admin only)
 - Current user profile
+- Certificate upload
 """
 
+import os
+import uuid
+import hashlib
+from pathlib import Path
+
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import transaction
 from rest_framework import viewsets, views, status, filters
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
@@ -335,3 +343,134 @@ class AccessibleTenantsView(views.APIView):
 
         serializer = TenantListSerializer(tenants, many=True)
         return Response(serializer.data)
+
+
+class CertificateUploadView(views.APIView):
+    """
+    View for uploading certificate files for tenant authentication.
+
+    Accepts .pfx, .pem, or .cer certificate files and stores them
+    in a secure location on the server.
+    """
+
+    permission_classes = [IsAuthenticated, IsAdminRole]
+    parser_classes = [MultiPartParser, FormParser]
+
+    ALLOWED_EXTENSIONS = {'.pfx', '.pem', '.cer', '.crt', '.p12'}
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+    def post(self, request):
+        """Upload a certificate file."""
+        if 'certificate' not in request.FILES:
+            return Response(
+                {'detail': 'No certificate file provided.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        cert_file = request.FILES['certificate']
+
+        # Validate file extension
+        file_ext = Path(cert_file.name).suffix.lower()
+        if file_ext not in self.ALLOWED_EXTENSIONS:
+            return Response(
+                {'detail': f'Invalid file type. Allowed types: {", ".join(self.ALLOWED_EXTENSIONS)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate file size
+        if cert_file.size > self.MAX_FILE_SIZE:
+            return Response(
+                {'detail': f'File too large. Maximum size is {self.MAX_FILE_SIZE // (1024 * 1024)} MB.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Generate unique filename
+        unique_id = uuid.uuid4().hex[:12]
+        safe_name = f"cert_{unique_id}{file_ext}"
+
+        # Create certificates directory if it doesn't exist
+        cert_dir = getattr(settings, 'CERTIFICATES_DIR', settings.BASE_DIR / 'certificates')
+        cert_dir = Path(cert_dir)
+        cert_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save the file
+        cert_path = cert_dir / safe_name
+
+        try:
+            with open(cert_path, 'wb+') as destination:
+                for chunk in cert_file.chunks():
+                    destination.write(chunk)
+
+            # Set restrictive permissions (owner read/write only)
+            os.chmod(cert_path, 0o600)
+
+            # Calculate thumbprint for PFX/PEM files
+            thumbprint = None
+            try:
+                thumbprint = self._calculate_thumbprint(cert_path, file_ext)
+            except Exception:
+                # Thumbprint calculation is optional - don't fail the upload
+                pass
+
+            return Response({
+                'certificate_path': str(cert_path),
+                'certificate_thumbprint': thumbprint,
+                'filename': safe_name,
+                'size': cert_file.size,
+            }, status=status.HTTP_201_CREATED)
+
+        except IOError as e:
+            return Response(
+                {'detail': f'Failed to save certificate: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def _calculate_thumbprint(self, cert_path: Path, file_ext: str) -> str | None:
+        """
+        Calculate the SHA1 thumbprint of a certificate.
+
+        Note: This is a simplified implementation. For production use,
+        you may want to use cryptography library for proper cert parsing.
+        """
+        try:
+            from cryptography import x509
+            from cryptography.hazmat.primitives import hashes
+            from cryptography.hazmat.primitives.serialization import pkcs12
+
+            with open(cert_path, 'rb') as f:
+                cert_data = f.read()
+
+            if file_ext in ['.pfx', '.p12']:
+                # Parse PKCS12 (try without password first)
+                try:
+                    private_key, certificate, additional_certs = pkcs12.load_key_and_certificates(
+                        cert_data, None
+                    )
+                except Exception:
+                    # Certificate may be password protected
+                    return None
+
+                if certificate:
+                    fingerprint = certificate.fingerprint(hashes.SHA1())
+                    return fingerprint.hex().upper()
+            elif file_ext in ['.pem', '.cer', '.crt']:
+                # Parse PEM certificate
+                try:
+                    certificate = x509.load_pem_x509_certificate(cert_data)
+                    fingerprint = certificate.fingerprint(hashes.SHA1())
+                    return fingerprint.hex().upper()
+                except Exception:
+                    # Try DER format
+                    try:
+                        certificate = x509.load_der_x509_certificate(cert_data)
+                        fingerprint = certificate.fingerprint(hashes.SHA1())
+                        return fingerprint.hex().upper()
+                    except Exception:
+                        return None
+        except ImportError:
+            # cryptography library not available
+            return None
+        except Exception:
+            return None
+
+        return None

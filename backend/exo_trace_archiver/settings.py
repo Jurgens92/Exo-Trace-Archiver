@@ -121,6 +121,14 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+# Media files (uploaded files like certificates)
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# Create certificates directory (more restrictive location for sensitive files)
+CERTIFICATES_DIR = BASE_DIR / 'certificates'
+CERTIFICATES_DIR.mkdir(exist_ok=True)
+
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

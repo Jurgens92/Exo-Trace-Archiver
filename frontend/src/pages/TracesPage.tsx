@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Filter, X } from 'lucide-react'
+import { Search, Filter, X, Building2 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -21,6 +22,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useTraces } from '@/hooks/useTraces'
+import { useTenantContext } from '@/hooks/useTenantContext'
 import { LoadingPage } from '@/components/LoadingSpinner'
 import { Pagination } from '@/components/Pagination'
 import { StatusBadge, DirectionBadge } from '@/components/StatusBadge'
@@ -30,6 +32,7 @@ import type { TraceFilterParams, TraceStatus, TraceDirection } from '@/api/types
 const PAGE_SIZE = 50
 
 export function TracesPage() {
+  const { selectedTenant } = useTenantContext()
   const [filters, setFilters] = useState<TraceFilterParams>({
     page: 1,
     page_size: PAGE_SIZE,
@@ -37,7 +40,21 @@ export function TracesPage() {
   const [showFilters, setShowFilters] = useState(false)
   const [searchInput, setSearchInput] = useState('')
 
-  const { data, isLoading, error, refetch } = useTraces(filters)
+  // Combine user filters with tenant filter
+  const effectiveFilters = useMemo(() => {
+    const combined: TraceFilterParams = { ...filters }
+    if (selectedTenant) {
+      combined.tenant = selectedTenant.id
+    }
+    return combined
+  }, [filters, selectedTenant])
+
+  const { data, isLoading, error, refetch } = useTraces(effectiveFilters)
+
+  // Reset to page 1 when tenant changes
+  useEffect(() => {
+    setFilters((prev) => ({ ...prev, page: 1 }))
+  }, [selectedTenant])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -67,7 +84,17 @@ export function TracesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Message Traces</h1>
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold">Message Traces</h1>
+          {selectedTenant && (
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="gap-1">
+                <Building2 className="h-3 w-3" />
+                {selectedTenant.name}
+              </Badge>
+            </div>
+          )}
+        </div>
         <Button
           variant="outline"
           onClick={() => setShowFilters(!showFilters)}

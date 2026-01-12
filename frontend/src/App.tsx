@@ -10,6 +10,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { UsersPage } from '@/pages/UsersPage'
 import { TenantsPage } from '@/pages/TenantsPage'
 import { AuthProvider, useAuth } from '@/hooks/useAuth'
+import { TenantProvider } from '@/hooks/useTenantContext'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth()
@@ -26,7 +27,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />
   }
 
-  return <>{children}</>
+  return <TenantProvider>{children}</TenantProvider>
 }
 
 function App() {

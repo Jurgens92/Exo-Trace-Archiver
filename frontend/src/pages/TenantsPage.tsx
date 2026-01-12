@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Building2,
@@ -11,6 +11,8 @@ import {
   Check,
   X,
   Plug,
+  Upload,
+  FileKey,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -41,6 +43,7 @@ import {
   updateTenant,
   deleteTenant,
   testTenantConnection,
+  uploadCertificate,
 } from '@/api/tenants'
 import type { Tenant, TenantCreate, TenantUpdate } from '@/api/types'
 
@@ -298,6 +301,8 @@ interface CreateTenantFormProps {
 }
 
 function CreateTenantForm({ onSubmit, onCancel, isLoading }: CreateTenantFormProps) {
+  const { toast } = useToast()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [formData, setFormData] = useState<TenantCreate>({
     name: '',
     tenant_id: '',
@@ -307,6 +312,50 @@ function CreateTenantForm({ onSubmit, onCancel, isLoading }: CreateTenantFormPro
     organization: '',
     is_active: true,
   })
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file extension
+    const allowedExtensions = ['.pfx', '.pem', '.cer', '.crt', '.p12']
+    const fileExt = file.name.toLowerCase().substring(file.name.lastIndexOf('.'))
+    if (!allowedExtensions.includes(fileExt)) {
+      toast({
+        title: 'Invalid file type',
+        description: `Allowed types: ${allowedExtensions.join(', ')}`,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setIsUploading(true)
+    try {
+      const result = await uploadCertificate(file)
+      setFormData({
+        ...formData,
+        certificate_path: result.certificate_path,
+        certificate_thumbprint: result.certificate_thumbprint || formData.certificate_thumbprint,
+      })
+      setUploadedFileName(file.name)
+      toast({
+        title: 'Certificate uploaded',
+        description: result.certificate_thumbprint
+          ? `Thumbprint: ${result.certificate_thumbprint.substring(0, 16)}...`
+          : 'Certificate saved successfully',
+      })
+    } catch {
+      toast({
+        title: 'Upload failed',
+        description: 'Failed to upload certificate file',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsUploading(false)
+    }
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -400,20 +449,47 @@ function CreateTenantForm({ onSubmit, onCancel, isLoading }: CreateTenantFormPro
 
             {formData.auth_method === 'certificate' && (
               <>
-                <div className="space-y-2">
-                  <Label htmlFor="certificate_path">Certificate Path</Label>
-                  <Input
-                    id="certificate_path"
-                    placeholder="/path/to/certificate.pfx"
-                    value={formData.certificate_path || ''}
-                    onChange={(e) => setFormData({ ...formData, certificate_path: e.target.value })}
-                  />
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Certificate File *</Label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                      accept=".pfx,.pem,.cer,.crt,.p12"
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="flex-shrink-0"
+                    >
+                      {isUploading ? (
+                        <LoadingSpinner size="sm" className="mr-2" />
+                      ) : (
+                        <Upload className="h-4 w-4 mr-2" />
+                      )}
+                      Upload Certificate
+                    </Button>
+                    {uploadedFileName && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <FileKey className="h-4 w-4" />
+                        <span className="truncate max-w-[200px]">{uploadedFileName}</span>
+                        <Check className="h-4 w-4 text-green-500" />
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Supported formats: .pfx, .pem, .cer, .crt, .p12
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="certificate_thumbprint">Certificate Thumbprint</Label>
                   <Input
                     id="certificate_thumbprint"
-                    placeholder="ABC123..."
+                    placeholder="Auto-detected or enter manually"
                     value={formData.certificate_thumbprint || ''}
                     onChange={(e) => setFormData({ ...formData, certificate_thumbprint: e.target.value })}
                   />
@@ -423,6 +499,7 @@ function CreateTenantForm({ onSubmit, onCancel, isLoading }: CreateTenantFormPro
                   <Input
                     id="certificate_password"
                     type="password"
+                    placeholder="If password-protected"
                     value={formData.certificate_password || ''}
                     onChange={(e) => setFormData({ ...formData, certificate_password: e.target.value })}
                   />
@@ -447,7 +524,7 @@ function CreateTenantForm({ onSubmit, onCancel, isLoading }: CreateTenantFormPro
             <Button type="button" variant="outline" onClick={onCancel}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading || isUploading}>
               {isLoading ? <LoadingSpinner size="sm" className="mr-2" /> : null}
               Create Tenant
             </Button>
@@ -466,6 +543,8 @@ interface EditTenantFormProps {
 }
 
 function EditTenantForm({ tenant, onSubmit, onCancel, isLoading }: EditTenantFormProps) {
+  const { toast } = useToast()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [formData, setFormData] = useState<TenantUpdate>({
     name: tenant.name,
     organization: tenant.organization,
@@ -475,6 +554,50 @@ function EditTenantForm({ tenant, onSubmit, onCancel, isLoading }: EditTenantFor
     certificate_path: tenant.certificate_path,
     certificate_thumbprint: tenant.certificate_thumbprint,
   })
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file extension
+    const allowedExtensions = ['.pfx', '.pem', '.cer', '.crt', '.p12']
+    const fileExt = file.name.toLowerCase().substring(file.name.lastIndexOf('.'))
+    if (!allowedExtensions.includes(fileExt)) {
+      toast({
+        title: 'Invalid file type',
+        description: `Allowed types: ${allowedExtensions.join(', ')}`,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setIsUploading(true)
+    try {
+      const result = await uploadCertificate(file)
+      setFormData({
+        ...formData,
+        certificate_path: result.certificate_path,
+        certificate_thumbprint: result.certificate_thumbprint || formData.certificate_thumbprint,
+      })
+      setUploadedFileName(file.name)
+      toast({
+        title: 'Certificate uploaded',
+        description: result.certificate_thumbprint
+          ? `Thumbprint: ${result.certificate_thumbprint.substring(0, 16)}...`
+          : 'Certificate saved successfully',
+      })
+    } catch {
+      toast({
+        title: 'Upload failed',
+        description: 'Failed to upload certificate file',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsUploading(false)
+    }
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -560,24 +683,59 @@ function EditTenantForm({ tenant, onSubmit, onCancel, isLoading }: EditTenantFor
 
             {formData.auth_method === 'certificate' && (
               <>
-                <div className="space-y-2">
-                  <Label htmlFor="edit_certificate_path">Certificate Path</Label>
-                  <Input
-                    id="edit_certificate_path"
-                    value={formData.certificate_path || ''}
-                    onChange={(e) => setFormData({ ...formData, certificate_path: e.target.value })}
-                  />
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Certificate File</Label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                      accept=".pfx,.pem,.cer,.crt,.p12"
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="flex-shrink-0"
+                    >
+                      {isUploading ? (
+                        <LoadingSpinner size="sm" className="mr-2" />
+                      ) : (
+                        <Upload className="h-4 w-4 mr-2" />
+                      )}
+                      Upload New Certificate
+                    </Button>
+                    {uploadedFileName ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <FileKey className="h-4 w-4" />
+                        <span className="truncate max-w-[200px]">{uploadedFileName}</span>
+                        <Check className="h-4 w-4 text-green-500" />
+                      </div>
+                    ) : tenant.has_certificate ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <FileKey className="h-4 w-4" />
+                        <span>Certificate configured</span>
+                        <Check className="h-4 w-4 text-green-500" />
+                      </div>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Supported formats: .pfx, .pem, .cer, .crt, .p12
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit_certificate_thumbprint">Certificate Thumbprint</Label>
                   <Input
                     id="edit_certificate_thumbprint"
+                    placeholder="Auto-detected or enter manually"
                     value={formData.certificate_thumbprint || ''}
                     onChange={(e) => setFormData({ ...formData, certificate_thumbprint: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit_certificate_password">New Certificate Password</Label>
+                  <Label htmlFor="edit_certificate_password">Certificate Password</Label>
                   <Input
                     id="edit_certificate_password"
                     type="password"
@@ -604,7 +762,7 @@ function EditTenantForm({ tenant, onSubmit, onCancel, isLoading }: EditTenantFor
             <Button type="button" variant="outline" onClick={onCancel}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading || isUploading}>
               {isLoading ? <LoadingSpinner size="sm" className="mr-2" /> : null}
               Save Changes
             </Button>
