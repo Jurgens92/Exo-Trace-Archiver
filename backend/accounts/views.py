@@ -266,6 +266,9 @@ class TenantViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def test_connection(self, request, pk=None):
         """Test connection to the MS365 tenant."""
+        import logging
+        logger = logging.getLogger('accounts')
+
         tenant = self.get_object()
 
         try:
@@ -278,6 +281,7 @@ class TenantViewSet(viewsets.ModelViewSet):
                 'detail': 'Successfully authenticated with tenant.'
             })
         except Exception as e:
+            logger.error(f"Test connection failed for tenant {tenant.name}: {str(e)}")
             return Response({
                 'status': 'failed',
                 'detail': str(e)

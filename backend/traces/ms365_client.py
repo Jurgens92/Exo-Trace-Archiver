@@ -687,12 +687,14 @@ class TenantGraphAPIClient(GraphAPIClient):
         if cert_path_obj.suffix.lower() == '.pem':
             with open(cert_path_obj, 'r') as f:
                 private_key = f.read()
+            passphrase = cert_password if cert_password else None
         else:
             # For PFX/P12 files, extract the private key using cryptography
             private_key = self._load_pfx_private_key(
                 cert_path_obj,
                 cert_password.encode() if cert_password else None
             )
+            passphrase = None  # Already decrypted when loading PFX
 
         authority = f"https://login.microsoftonline.com/{self.tenant_id}"
 
@@ -702,7 +704,7 @@ class TenantGraphAPIClient(GraphAPIClient):
             client_credential={
                 "private_key": private_key,
                 "thumbprint": cert_thumbprint,
-                "passphrase": None,  # Already decrypted when loading PFX
+                "passphrase": passphrase,
             }
         )
 
