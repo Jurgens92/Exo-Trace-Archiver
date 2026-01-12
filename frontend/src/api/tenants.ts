@@ -93,3 +93,30 @@ export async function testTenantConnection(
   )
   return response.data
 }
+
+// Certificate upload response
+export interface CertificateUploadResponse {
+  certificate_path: string
+  certificate_thumbprint: string | null
+  filename: string
+  size: number
+}
+
+// Upload certificate file (admin only)
+export async function uploadCertificate(
+  file: File
+): Promise<CertificateUploadResponse> {
+  const formData = new FormData()
+  formData.append('certificate', file)
+
+  const response = await apiClient.post<CertificateUploadResponse>(
+    '/accounts/certificates/upload/',
+    formData,
+    {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    }
+  )
+  return response.data
+}

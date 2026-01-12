@@ -13,7 +13,16 @@ import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useAuth } from '@/hooks/useAuth'
+import { useTenantContext } from '@/hooks/useTenantContext'
 
 interface NavItem {
   name: string
@@ -34,6 +43,7 @@ const navigation: NavItem[] = [
 export function Layout() {
   const location = useLocation()
   const { logout, isAdmin } = useAuth()
+  const { availableTenants, selectedTenant, selectTenant } = useTenantContext()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Filter navigation items based on admin status
@@ -70,6 +80,39 @@ export function Layout() {
             <span className="font-semibold text-lg">Exo-Trace</span>
           </Link>
         </div>
+
+        {/* Tenant Selector */}
+        {availableTenants.length > 0 && (
+          <div className="px-3 py-3 border-b">
+            <div className="flex items-center gap-2 mb-1">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground">Tenant</span>
+            </div>
+            <Select
+              value={selectedTenant?.id?.toString() ?? 'all'}
+              onValueChange={(value) => {
+                if (value === 'all') {
+                  selectTenant(null)
+                } else {
+                  selectTenant(parseInt(value, 10))
+                }
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select tenant" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Tenants</SelectItem>
+                {availableTenants.length > 0 && <SelectSeparator />}
+                {availableTenants.map((tenant) => (
+                  <SelectItem key={tenant.id} value={tenant.id.toString()}>
+                    {tenant.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <nav className="flex-1 space-y-1 px-3 py-4">
           {visibleNavigation.map((item) => {
