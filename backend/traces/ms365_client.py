@@ -538,6 +538,8 @@ def get_ms365_client() -> BaseMS365Client:
     Factory function to get the appropriate MS365 client based on configuration.
 
     Returns GraphAPIClient if MS365_API_METHOD is 'graph', otherwise PowerShellClient.
+
+    DEPRECATED: Use get_ms365_client_for_tenant() for multi-tenant support.
     """
     api_method = settings.MS365_API_METHOD
 
@@ -547,6 +549,304 @@ def get_ms365_client() -> BaseMS365Client:
     else:
         logger.info("Using Exchange Online PowerShell client")
         return PowerShellClient()
+
+
+def get_ms365_client_for_tenant(tenant) -> 'TenantGraphAPIClient | TenantPowerShellClient':
+    """
+    Factory function to get the appropriate MS365 client for a specific tenant.
+
+    Args:
+        tenant: Tenant model instance with MS365 configuration
+
+    Returns:
+        Client instance configured for the specific tenant
+    """
+    if tenant.api_method == 'graph':
+        logger.info(f"Using Microsoft Graph API client for tenant: {tenant.name}")
+        return TenantGraphAPIClient(tenant)
+    else:
+        logger.info(f"Using Exchange Online PowerShell client for tenant: {tenant.name}")
+        return TenantPowerShellClient(tenant)
+
+
+class TenantGraphAPIClient(GraphAPIClient):
+    """
+    Microsoft Graph API client for a specific tenant.
+
+    Overrides the base class to use tenant configuration from database
+    instead of settings.
+    """
+
+    def __init__(self, tenant):
+        # Don't call super().__init__() as it uses settings
+        self.tenant = tenant
+        self.tenant_id = tenant.tenant_id
+        self.client_id = tenant.client_id
+        self._access_token = None
+        self._token_expiry = None
+        self._validate_config()
+
+    def _validate_config(self):
+        """Validate that required configuration is present."""
+        if not self.tenant_id:
+            raise MS365AuthenticationError(
+                f"Tenant ID not configured for tenant: {self.tenant.name}"
+            )
+        if not self.client_id:
+            raise MS365AuthenticationError(
+                f"Client ID not configured for tenant: {self.tenant.name}"
+            )
+
+    def authenticate(self) -> bool:
+        """
+        Authenticate using MSAL with tenant-specific configuration.
+        """
+        try:
+            import msal
+        except ImportError:
+            raise MS365AuthenticationError(
+                "MSAL library not installed. "
+                "Install it with: pip install msal"
+            )
+
+        if self.tenant.auth_method == 'certificate':
+            return self._authenticate_with_certificate_tenant(msal)
+        else:
+            return self._authenticate_with_secret_tenant(msal)
+
+    def _authenticate_with_certificate_tenant(self, msal) -> bool:
+        """Authenticate using certificate from tenant configuration."""
+        cert_path = self.tenant.certificate_path
+        cert_password = self.tenant.certificate_password
+        cert_thumbprint = self.tenant.certificate_thumbprint
+
+        if not cert_path:
+            raise MS365AuthenticationError(
+                f"Certificate path not configured for tenant: {self.tenant.name}"
+            )
+
+        cert_path_obj = Path(cert_path)
+        if not cert_path_obj.exists():
+            raise MS365AuthenticationError(
+                f"Certificate file not found: {cert_path}"
+            )
+
+        if cert_path_obj.suffix.lower() == '.pem':
+            with open(cert_path_obj, 'r') as f:
+                private_key = f.read()
+        else:
+            private_key = str(cert_path_obj)
+
+        authority = f"https://login.microsoftonline.com/{self.tenant_id}"
+
+        app = msal.ConfidentialClientApplication(
+            self.client_id,
+            authority=authority,
+            client_credential={
+                "private_key": private_key,
+                "thumbprint": cert_thumbprint,
+                "passphrase": cert_password if cert_password else None,
+            }
+        )
+
+        scopes = ["https://graph.microsoft.com/.default"]
+        result = app.acquire_token_for_client(scopes=scopes)
+
+        if "access_token" in result:
+            self._access_token = result["access_token"]
+            self._token_expiry = timezone.now() + timedelta(minutes=55)
+            logger.info(f"Successfully authenticated with Graph API for tenant: {self.tenant.name}")
+            return True
+        else:
+            error = result.get("error_description", result.get("error", "Unknown error"))
+            raise MS365AuthenticationError(f"Certificate authentication failed: {error}")
+
+    def _authenticate_with_secret_tenant(self, msal) -> bool:
+        """Authenticate using client secret from tenant configuration."""
+        client_secret = self.tenant.client_secret
+
+        if not client_secret:
+            raise MS365AuthenticationError(
+                f"Client secret not configured for tenant: {self.tenant.name}"
+            )
+
+        authority = f"https://login.microsoftonline.com/{self.tenant_id}"
+
+        app = msal.ConfidentialClientApplication(
+            self.client_id,
+            authority=authority,
+            client_credential=client_secret
+        )
+
+        scopes = ["https://graph.microsoft.com/.default"]
+        result = app.acquire_token_for_client(scopes=scopes)
+
+        if "access_token" in result:
+            self._access_token = result["access_token"]
+            self._token_expiry = timezone.now() + timedelta(minutes=55)
+            logger.info(f"Successfully authenticated with Graph API for tenant: {self.tenant.name}")
+            return True
+        else:
+            error = result.get("error_description", result.get("error", "Unknown error"))
+            raise MS365AuthenticationError(f"Client secret authentication failed: {error}")
+
+    def _get_access_token(self) -> str:
+        """Get valid access token, refreshing if necessary."""
+        self._ensure_authenticated()
+        return self._access_token
+
+
+class TenantPowerShellClient(PowerShellClient):
+    """
+    Exchange Online PowerShell client for a specific tenant.
+
+    Overrides the base class to use tenant configuration from database
+    instead of settings.
+    """
+
+    def __init__(self, tenant):
+        # Don't call super().__init__() as it uses settings
+        self.tenant = tenant
+        self.tenant_id = tenant.tenant_id
+        self.client_id = tenant.client_id
+        self._connected = False
+
+    def authenticate(self) -> bool:
+        """Validate tenant configuration for PowerShell."""
+        if self.tenant.auth_method == 'certificate':
+            if not self.tenant.certificate_thumbprint:
+                raise MS365AuthenticationError(
+                    f"Certificate thumbprint required for PowerShell auth on tenant: {self.tenant.name}"
+                )
+            if not self.tenant.organization:
+                raise MS365AuthenticationError(
+                    f"Organization required for PowerShell auth on tenant: {self.tenant.name}"
+                )
+        else:
+            if not self.tenant.client_secret:
+                raise MS365AuthenticationError(
+                    f"Client secret required for PowerShell secret auth on tenant: {self.tenant.name}"
+                )
+
+        logger.info(f"PowerShell client configuration validated for tenant: {self.tenant.name}")
+        return True
+
+    def get_message_traces(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        page_size: int = 1000
+    ) -> list[dict[str, Any]]:
+        """Retrieve message traces using Exchange Online PowerShell for this tenant."""
+        ps_executable = self._get_powershell_executable()
+
+        start_str = start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+        end_str = end_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        if self.tenant.auth_method == 'certificate':
+            connect_cmd = f'''
+Connect-ExchangeOnline `
+    -CertificateThumbprint "{self.tenant.certificate_thumbprint}" `
+    -AppId "{self.client_id}" `
+    -Organization "{self.tenant.organization}" `
+    -ShowBanner:$false
+'''
+        else:
+            connect_cmd = f'''
+$secureSecret = ConvertTo-SecureString -String "{self.tenant.client_secret}" -AsPlainText -Force
+$credential = New-Object System.Management.Automation.PSCredential("{self.client_id}", $secureSecret)
+
+Connect-ExchangeOnline `
+    -AppId "{self.client_id}" `
+    -Organization "{self.tenant.organization}" `
+    -Credential $credential `
+    -ShowBanner:$false
+'''
+
+        ps_script = f'''
+$ErrorActionPreference = "Stop"
+
+try {{
+    Import-Module ExchangeOnlineManagement -ErrorAction Stop
+    {connect_cmd}
+
+    $traces = @()
+
+    try {{
+        $traces = Get-MessageTraceV2 `
+            -StartDate "{start_str}" `
+            -EndDate "{end_str}" `
+            -PageSize {page_size} `
+            -ErrorAction Stop |
+            Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
+                Subject, Status, ToIP, FromIP, Size, MessageTraceId
+    }}
+    catch {{
+        Write-Warning "Get-MessageTraceV2 not available, using Get-MessageTrace"
+        $traces = Get-MessageTrace `
+            -StartDate "{start_str}" `
+            -EndDate "{end_str}" `
+            -PageSize {page_size} `
+            -ErrorAction Stop |
+            Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
+                Subject, Status, ToIP, FromIP, Size, MessageTraceId
+    }}
+
+    $traces | ConvertTo-Json -Depth 10 -Compress
+    Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
+}}
+catch {{
+    Write-Error $_.Exception.Message
+    exit 1
+}}
+'''
+
+        with tempfile.NamedTemporaryFile(
+            mode='w',
+            suffix='.ps1',
+            delete=False
+        ) as f:
+            f.write(ps_script)
+            script_path = f.name
+
+        try:
+            result = subprocess.run(
+                [ps_executable, '-NoProfile', '-NonInteractive', '-File', script_path],
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+
+            if result.returncode != 0:
+                error_msg = result.stderr or result.stdout or "Unknown PowerShell error"
+                raise MS365APIError(f"PowerShell error: {error_msg}")
+
+            output = result.stdout.strip()
+            if not output:
+                logger.info(f"No message traces found for tenant: {self.tenant.name}")
+                return []
+
+            try:
+                traces = json.loads(output)
+                if isinstance(traces, dict):
+                    traces = [traces]
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse PowerShell output: {output[:500]}")
+                raise MS365APIError(f"Invalid JSON from PowerShell: {str(e)}")
+
+            logger.info(f"Retrieved {len(traces)} message traces via PowerShell for tenant: {self.tenant.name}")
+            return traces
+
+        except subprocess.TimeoutExpired:
+            raise MS365APIError("PowerShell command timed out (5 minute limit)")
+
+        finally:
+            Path(script_path).unlink(missing_ok=True)
+
+    def _get_access_token(self) -> str:
+        """Not applicable for PowerShell client, but needed for compatibility."""
+        self.authenticate()
+        return "powershell-authenticated"
 
 
 def normalize_trace_data(trace: dict, source: str = 'graph') -> dict:

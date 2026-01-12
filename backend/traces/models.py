@@ -25,7 +25,19 @@ class MessageTraceLog(models.Model):
 
     The message_id field corresponds to the MessageId from Exchange Online,
     which is the Internet Message ID (RFC 5322 Message-ID header).
+
+    Multi-tenant: Each record is linked to a Tenant via ForeignKey.
     """
+
+    # Link to tenant (for multi-tenant support)
+    tenant = models.ForeignKey(
+        'accounts.Tenant',
+        on_delete=models.CASCADE,
+        related_name='message_traces',
+        null=True,  # Allow null for backwards compatibility during migration
+        blank=True,
+        help_text="The MS365 tenant this trace belongs to"
+    )
 
     class Direction(models.TextChoices):
         INBOUND = 'Inbound', 'Inbound'
@@ -127,6 +139,7 @@ class MessageTraceLog(models.Model):
         # A message can appear multiple times for different recipients
         # or be re-processed, so we use a unique constraint on the combo
         indexes = [
+            models.Index(fields=['tenant', 'received_date']),
             models.Index(fields=['received_date', 'sender']),
             models.Index(fields=['received_date', 'recipient']),
             models.Index(fields=['status', 'direction']),
@@ -134,8 +147,8 @@ class MessageTraceLog(models.Model):
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=['message_id', 'recipient', 'received_date'],
-                name='unique_message_recipient_date'
+                fields=['tenant', 'message_id', 'recipient', 'received_date'],
+                name='unique_tenant_message_recipient_date'
             )
         ]
 
@@ -179,7 +192,19 @@ class PullHistory(models.Model):
 
     This provides an audit trail of when pulls occurred, how many records
     were retrieved, and any errors that happened during the pull.
+
+    Multi-tenant: Each pull is linked to a specific Tenant.
     """
+
+    # Link to tenant (for multi-tenant support)
+    tenant = models.ForeignKey(
+        'accounts.Tenant',
+        on_delete=models.CASCADE,
+        related_name='pull_history',
+        null=True,  # Allow null for backwards compatibility during migration
+        blank=True,
+        help_text="The MS365 tenant this pull was for"
+    )
 
     class Status(models.TextChoices):
         RUNNING = 'Running', 'Running'

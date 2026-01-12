@@ -6,6 +6,8 @@ import {
   Settings,
   LogOut,
   Menu,
+  Users,
+  Building2,
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -13,17 +15,31 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { useAuth } from '@/hooks/useAuth'
 
-const navigation = [
+interface NavItem {
+  name: string
+  href: string
+  icon: React.ComponentType<{ className?: string }>
+  adminOnly?: boolean
+}
+
+const navigation: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Message Traces', href: '/traces', icon: Mail },
   { name: 'Pull History', href: '/pull-history', icon: History },
+  { name: 'Users', href: '/users', icon: Users, adminOnly: true },
+  { name: 'Tenants', href: '/tenants', icon: Building2, adminOnly: true },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
 export function Layout() {
   const location = useLocation()
-  const { logout } = useAuth()
+  const { logout, isAdmin } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Filter navigation items based on admin status
+  const visibleNavigation = navigation.filter(
+    (item) => !item.adminOnly || isAdmin
+  )
 
   return (
     <div className="min-h-screen bg-background">
@@ -56,7 +72,7 @@ export function Layout() {
         </div>
 
         <nav className="flex-1 space-y-1 px-3 py-4">
-          {navigation.map((item) => {
+          {visibleNavigation.map((item) => {
             const isActive =
               item.href === '/'
                 ? location.pathname === '/'
