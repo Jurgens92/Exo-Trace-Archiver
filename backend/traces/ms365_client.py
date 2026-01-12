@@ -173,13 +173,15 @@ class GraphAPIClient(BaseMS365Client):
         # For PEM format certificates
         if cert_path.suffix.lower() == '.pem':
             with open(cert_path, 'r') as f:
-                cert_data = f.read()
-            # Parse PEM to get private key and certificate
-            private_key = cert_data  # Simplified - in production parse properly
+                private_key = f.read()
+            passphrase = cert_password if cert_password else None
         else:
-            # For PFX/PKCS12 format
-            # MSAL can handle PFX directly with thumbprint
-            private_key = str(cert_path)
+            # For PFX/PKCS12 format, extract the private key
+            private_key = self._load_pfx_private_key(
+                cert_path,
+                cert_password.encode() if cert_password else None
+            )
+            passphrase = None  # Already decrypted when loading PFX
 
         authority = f"https://login.microsoftonline.com/{self.tenant_id}"
 
@@ -189,7 +191,7 @@ class GraphAPIClient(BaseMS365Client):
             client_credential={
                 "private_key": private_key,
                 "thumbprint": settings.MS365_CERTIFICATE_THUMBPRINT,
-                "passphrase": cert_password if cert_password else None,
+                "passphrase": passphrase,
             }
         )
 
@@ -206,6 +208,57 @@ class GraphAPIClient(BaseMS365Client):
         else:
             error = result.get("error_description", result.get("error", "Unknown error"))
             raise MS365AuthenticationError(f"Certificate authentication failed: {error}")
+
+    def _load_pfx_private_key(self, cert_path: Path, password: bytes | None) -> str:
+        """
+        Load a PFX/P12 certificate and extract the private key in PEM format.
+
+        Args:
+            cert_path: Path to the PFX/P12 file
+            password: Optional password for the certificate
+
+        Returns:
+            Private key in PEM format as a string
+        """
+        try:
+            from cryptography.hazmat.primitives.serialization import pkcs12, Encoding, PrivateFormat, NoEncryption
+        except ImportError:
+            raise MS365AuthenticationError(
+                "cryptography library required for PFX certificates. "
+                "Install it with: pip install cryptography"
+            )
+
+        try:
+            with open(cert_path, 'rb') as f:
+                pfx_data = f.read()
+
+            # Load the PFX file
+            private_key, certificate, additional_certs = pkcs12.load_key_and_certificates(
+                pfx_data, password
+            )
+
+            if private_key is None:
+                raise MS365AuthenticationError(
+                    f"No private key found in certificate file: {cert_path}"
+                )
+
+            # Serialize the private key to PEM format
+            pem_key = private_key.private_bytes(
+                encoding=Encoding.PEM,
+                format=PrivateFormat.PKCS8,
+                encryption_algorithm=NoEncryption()
+            )
+
+            return pem_key.decode('utf-8')
+
+        except ValueError as e:
+            raise MS365AuthenticationError(
+                f"Failed to load certificate (wrong password?): {str(e)}"
+            )
+        except Exception as e:
+            raise MS365AuthenticationError(
+                f"Failed to load certificate from {cert_path}: {str(e)}"
+            )
 
     def _authenticate_with_secret(self, msal) -> bool:
         """Authenticate using client secret."""
@@ -635,7 +688,11 @@ class TenantGraphAPIClient(GraphAPIClient):
             with open(cert_path_obj, 'r') as f:
                 private_key = f.read()
         else:
-            private_key = str(cert_path_obj)
+            # For PFX/P12 files, extract the private key using cryptography
+            private_key = self._load_pfx_private_key(
+                cert_path_obj,
+                cert_password.encode() if cert_password else None
+            )
 
         authority = f"https://login.microsoftonline.com/{self.tenant_id}"
 
@@ -645,7 +702,7 @@ class TenantGraphAPIClient(GraphAPIClient):
             client_credential={
                 "private_key": private_key,
                 "thumbprint": cert_thumbprint,
-                "passphrase": cert_password if cert_password else None,
+                "passphrase": None,  # Already decrypted when loading PFX
             }
         )
 
@@ -660,6 +717,57 @@ class TenantGraphAPIClient(GraphAPIClient):
         else:
             error = result.get("error_description", result.get("error", "Unknown error"))
             raise MS365AuthenticationError(f"Certificate authentication failed: {error}")
+
+    def _load_pfx_private_key(self, cert_path: Path, password: bytes | None) -> str:
+        """
+        Load a PFX/P12 certificate and extract the private key in PEM format.
+
+        Args:
+            cert_path: Path to the PFX/P12 file
+            password: Optional password for the certificate
+
+        Returns:
+            Private key in PEM format as a string
+        """
+        try:
+            from cryptography.hazmat.primitives.serialization import pkcs12, Encoding, PrivateFormat, NoEncryption
+        except ImportError:
+            raise MS365AuthenticationError(
+                "cryptography library required for PFX certificates. "
+                "Install it with: pip install cryptography"
+            )
+
+        try:
+            with open(cert_path, 'rb') as f:
+                pfx_data = f.read()
+
+            # Load the PFX file
+            private_key, certificate, additional_certs = pkcs12.load_key_and_certificates(
+                pfx_data, password
+            )
+
+            if private_key is None:
+                raise MS365AuthenticationError(
+                    f"No private key found in certificate file: {cert_path}"
+                )
+
+            # Serialize the private key to PEM format
+            pem_key = private_key.private_bytes(
+                encoding=Encoding.PEM,
+                format=PrivateFormat.PKCS8,
+                encryption_algorithm=NoEncryption()
+            )
+
+            return pem_key.decode('utf-8')
+
+        except ValueError as e:
+            raise MS365AuthenticationError(
+                f"Failed to load certificate (wrong password?): {str(e)}"
+            )
+        except Exception as e:
+            raise MS365AuthenticationError(
+                f"Failed to load certificate from {cert_path}: {str(e)}"
+            )
 
     def _authenticate_with_secret_tenant(self, msal) -> bool:
         """Authenticate using client secret from tenant configuration."""
