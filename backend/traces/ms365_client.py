@@ -591,9 +591,27 @@ try {{
         $allTraces = $allTraces[0..($maxRecords - 1)]
     }}
 
+    # Sanitize string fields to remove control characters that break JSON parsing
+    $cleanTraces = @()
+    foreach ($trace in $allTraces) {{
+        $cleanTrace = [PSCustomObject]@{{
+            MessageId = if ($trace.MessageId) {{ [regex]::Replace($trace.MessageId, '[\x00-\x1F\x7F]', '') }} else {{ '' }}
+            Received = $trace.Received
+            SenderAddress = if ($trace.SenderAddress) {{ [regex]::Replace($trace.SenderAddress, '[\x00-\x1F\x7F]', '') }} else {{ '' }}
+            RecipientAddress = if ($trace.RecipientAddress) {{ [regex]::Replace($trace.RecipientAddress, '[\x00-\x1F\x7F]', '') }} else {{ '' }}
+            Subject = if ($trace.Subject) {{ [regex]::Replace($trace.Subject, '[\x00-\x1F\x7F]', '') }} else {{ '' }}
+            Status = if ($trace.Status) {{ $trace.Status.ToString() }} else {{ '' }}
+            ToIP = if ($trace.ToIP) {{ $trace.ToIP.ToString() }} else {{ '' }}
+            FromIP = if ($trace.FromIP) {{ $trace.FromIP.ToString() }} else {{ '' }}
+            Size = if ($trace.Size) {{ $trace.Size }} else {{ 0 }}
+            MessageTraceId = if ($trace.MessageTraceId) {{ $trace.MessageTraceId.ToString() }} else {{ '' }}
+        }}
+        $cleanTraces += $cleanTrace
+    }}
+
     # Output as JSON
-    if ($allTraces.Count -gt 0) {{
-        $allTraces | ConvertTo-Json -Depth 10 -Compress
+    if ($cleanTraces.Count -gt 0) {{
+        $cleanTraces | ConvertTo-Json -Depth 10 -Compress
     }}
 
     # Disconnect
@@ -1051,9 +1069,27 @@ try {{
         $allTraces = $allTraces[0..($maxRecords - 1)]
     }}
 
+    # Sanitize string fields to remove control characters that break JSON parsing
+    $cleanTraces = @()
+    foreach ($trace in $allTraces) {{
+        $cleanTrace = [PSCustomObject]@{{
+            MessageId = if ($trace.MessageId) {{ [regex]::Replace($trace.MessageId, '[\x00-\x1F\x7F]', '') }} else {{ '' }}
+            Received = $trace.Received
+            SenderAddress = if ($trace.SenderAddress) {{ [regex]::Replace($trace.SenderAddress, '[\x00-\x1F\x7F]', '') }} else {{ '' }}
+            RecipientAddress = if ($trace.RecipientAddress) {{ [regex]::Replace($trace.RecipientAddress, '[\x00-\x1F\x7F]', '') }} else {{ '' }}
+            Subject = if ($trace.Subject) {{ [regex]::Replace($trace.Subject, '[\x00-\x1F\x7F]', '') }} else {{ '' }}
+            Status = if ($trace.Status) {{ $trace.Status.ToString() }} else {{ '' }}
+            ToIP = if ($trace.ToIP) {{ $trace.ToIP.ToString() }} else {{ '' }}
+            FromIP = if ($trace.FromIP) {{ $trace.FromIP.ToString() }} else {{ '' }}
+            Size = if ($trace.Size) {{ $trace.Size }} else {{ 0 }}
+            MessageTraceId = if ($trace.MessageTraceId) {{ $trace.MessageTraceId.ToString() }} else {{ '' }}
+        }}
+        $cleanTraces += $cleanTrace
+    }}
+
     # Output as JSON
-    if ($allTraces.Count -gt 0) {{
-        $allTraces | ConvertTo-Json -Depth 10 -Compress
+    if ($cleanTraces.Count -gt 0) {{
+        $cleanTraces | ConvertTo-Json -Depth 10 -Compress
     }}
 
     Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
