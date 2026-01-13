@@ -29,7 +29,7 @@ export async function fetchPullHistory(params: {
  * Trigger a manual pull
  */
 export async function triggerManualPull(
-  data: ManualPullRequest = {}
+  data: ManualPullRequest
 ): Promise<ManualPullResponse> {
   const response = await apiClient.post<ManualPullResponse>(
     '/manual-pull/',
