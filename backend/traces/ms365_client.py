@@ -537,8 +537,9 @@ Connect-ExchangeOnline `
     -ShowBanner:$false
 '''
 
-        # PowerShell script to retrieve message traces with pagination support
-        # Uses Get-MessageTraceV2 (recommended) with -Skip parameter for pagination
+        # PowerShell script to retrieve message traces
+        # Get-MessageTraceV2 supports up to 5000 records per call with ResultSize
+        # For larger datasets, we use Page parameter for pagination
         max_records_check = f'$maxRecords = {max_records}' if max_records > 0 else '$maxRecords = [int]::MaxValue'
         ps_script = f'''
 $ErrorActionPreference = "Stop"
@@ -553,16 +554,16 @@ try {{
     # Pagination settings
     $pageSize = {ps_page_size}
     {max_records_check}
-    $skip = 0
+    $page = 1
     $allTraces = @()
 
-    # Paginate through results
+    # Paginate through results using Page parameter
     do {{
         $traces = Get-MessageTraceV2 `
             -StartDate "{start_str}" `
             -EndDate "{end_str}" `
             -ResultSize $pageSize `
-            -Skip $skip `
+            -Page $page `
             -ErrorAction Stop `
             -WarningAction SilentlyContinue |
             Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
@@ -574,7 +575,7 @@ try {{
                 $traces = @($traces)
             }}
             $allTraces += $traces
-            $skip += $traces.Count
+            $page++
         }} else {{
             break
         }}
@@ -995,7 +996,7 @@ Connect-ExchangeOnline `
     -ShowBanner:$false
 '''
 
-        # PowerShell script with pagination support
+        # PowerShell script with pagination support using Page parameter
         max_records_check = f'$maxRecords = {max_records}' if max_records > 0 else '$maxRecords = [int]::MaxValue'
         ps_script = f'''
 $ErrorActionPreference = "Stop"
@@ -1007,16 +1008,16 @@ try {{
     # Pagination settings
     $pageSize = {ps_page_size}
     {max_records_check}
-    $skip = 0
+    $page = 1
     $allTraces = @()
 
-    # Paginate through results
+    # Paginate through results using Page parameter
     do {{
         $traces = Get-MessageTraceV2 `
             -StartDate "{start_str}" `
             -EndDate "{end_str}" `
             -ResultSize $pageSize `
-            -Skip $skip `
+            -Page $page `
             -ErrorAction Stop `
             -WarningAction SilentlyContinue |
             Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
@@ -1028,7 +1029,7 @@ try {{
                 $traces = @($traces)
             }}
             $allTraces += $traces
-            $skip += $traces.Count
+            $page++
         }} else {{
             break
         }}
