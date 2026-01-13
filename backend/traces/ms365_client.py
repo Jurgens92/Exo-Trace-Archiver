@@ -548,7 +548,8 @@ try {{
         -StartDate "{start_str}" `
         -EndDate "{end_str}" `
         -ResultSize {page_size} `
-        -ErrorAction Stop |
+        -ErrorAction Stop `
+        -WarningAction SilentlyContinue |
         Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
             Subject, Status, ToIP, FromIP, Size, MessageTraceId
 
@@ -960,7 +961,8 @@ try {{
         -StartDate "{start_str}" `
         -EndDate "{end_str}" `
         -ResultSize {page_size} `
-        -ErrorAction Stop |
+        -ErrorAction Stop `
+        -WarningAction SilentlyContinue |
         Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
             Subject, Status, ToIP, FromIP, Size, MessageTraceId
 
