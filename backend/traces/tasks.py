@@ -33,6 +33,8 @@ from .ms365_client import (
     normalize_trace_data,
     MS365AuthenticationError,
     MS365APIError,
+    MS365GraphAPINotAvailableError,
+    TenantPowerShellClient,
 )
 
 logger = logging.getLogger('traces')
@@ -107,18 +109,46 @@ def pull_message_traces_for_tenant(
     try:
         # Get the MS365 client for this tenant
         client = get_ms365_client_for_tenant(tenant)
+        api_method_used = tenant.api_method
 
         # Authenticate
         logger.info(f"Authenticating with Microsoft 365 for tenant: {tenant.name}")
         client.authenticate()
 
-        # Pull traces
+        # Pull traces (with fallback to PowerShell if Graph API not available)
         logger.info(f"Retrieving message traces for tenant: {tenant.name}")
-        raw_traces = client.get_message_traces(
-            start_date=start_date,
-            end_date=end_date,
-            page_size=settings.MESSAGE_TRACE_PAGE_SIZE
-        )
+        try:
+            raw_traces = client.get_message_traces(
+                start_date=start_date,
+                end_date=end_date,
+                page_size=settings.MESSAGE_TRACE_PAGE_SIZE
+            )
+        except MS365GraphAPINotAvailableError as e:
+            # Graph API message trace endpoint not available - fall back to PowerShell
+            logger.warning(
+                f"Graph API not available for tenant {tenant.name}, falling back to PowerShell: {str(e)}"
+            )
+            # Check if tenant has required config for PowerShell fallback
+            if not tenant.organization:
+                raise MS365APIError(
+                    f"Graph API message trace endpoint not available and PowerShell fallback "
+                    f"cannot be used because 'organization' is not configured for tenant: {tenant.name}. "
+                    f"Either configure the organization field (e.g., 'contoso.onmicrosoft.com') "
+                    f"or add Office 365 Exchange Online API permissions in Azure AD. "
+                    f"Original error: {str(e)}"
+                )
+            # Create PowerShell client and retry
+            client = TenantPowerShellClient(tenant)
+            client.authenticate()
+            raw_traces = client.get_message_traces(
+                start_date=start_date,
+                end_date=end_date,
+                page_size=settings.MESSAGE_TRACE_PAGE_SIZE
+            )
+            api_method_used = 'powershell'
+            # Update pull history to reflect the actual method used
+            pull_history.api_method = 'powershell'
+            pull_history.save(update_fields=['api_method'])
 
         result['records_pulled'] = len(raw_traces)
         logger.info(f"Retrieved {len(raw_traces)} traces from tenant: {tenant.name}")
@@ -128,7 +158,7 @@ def pull_message_traces_for_tenant(
             records_new, records_updated = _store_traces_for_tenant(
                 raw_traces,
                 tenant=tenant,
-                source=tenant.api_method
+                source=api_method_used
             )
             result['records_new'] = records_new
             result['records_updated'] = records_updated

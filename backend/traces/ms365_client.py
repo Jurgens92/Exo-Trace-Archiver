@@ -50,6 +50,20 @@ class MS365APIError(Exception):
     pass
 
 
+class MS365GraphAPINotAvailableError(MS365APIError):
+    """
+    Raised when Graph API is not available for message traces.
+
+    This typically occurs when:
+    - The Graph API message trace endpoint requires additional permissions
+      (Office 365 Exchange Online API permissions)
+    - The endpoint is not yet available in the tenant's region
+
+    The caller should fall back to PowerShell when this error is raised.
+    """
+    pass
+
+
 class BaseMS365Client(ABC):
     """
     Abstract base class for Microsoft 365 clients.
@@ -369,8 +383,20 @@ class GraphAPIClient(BaseMS365Client):
                     continue
 
                 if response.status_code != 200:
+                    error_text = response.text
+                    # Check if this is the "protection.outlook.com not found" error
+                    # This indicates Graph API message trace endpoint requires additional
+                    # Exchange Online Protection permissions not configured in Azure AD
+                    if (response.status_code == 400 and
+                        ('protection.outlook.com' in error_text or
+                         'AADSTS500011' in error_text)):
+                        raise MS365GraphAPINotAvailableError(
+                            f"Graph API message trace endpoint requires additional "
+                            f"Exchange Online Protection permissions. Consider using "
+                            f"PowerShell method instead. Original error: {error_text}"
+                        )
                     raise MS365APIError(
-                        f"Graph API error: {response.status_code} - {response.text}"
+                        f"Graph API error: {response.status_code} - {error_text}"
                     )
 
                 data = response.json()
