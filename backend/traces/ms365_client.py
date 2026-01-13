@@ -873,6 +873,7 @@ class TenantPowerShellClient(PowerShellClient):
         self.tenant_id = tenant.tenant_id
         self.client_id = tenant.client_id
         self._connected = False
+        self._access_token = None
 
     def authenticate(self) -> bool:
         """Validate tenant configuration for PowerShell."""
@@ -890,9 +891,41 @@ class TenantPowerShellClient(PowerShellClient):
                 raise MS365AuthenticationError(
                     f"Client secret required for PowerShell secret auth on tenant: {self.tenant.name}"
                 )
+            # For client secret auth, we need to get an access token for Exchange Online
+            self._acquire_exchange_token()
 
         logger.info(f"PowerShell client configuration validated for tenant: {self.tenant.name}")
         return True
+
+    def _acquire_exchange_token(self):
+        """Acquire an access token for Exchange Online using client secret."""
+        try:
+            import msal
+        except ImportError:
+            raise MS365AuthenticationError(
+                "MSAL library not installed. Install it with: pip install msal"
+            )
+
+        authority = f"https://login.microsoftonline.com/{self.tenant_id}"
+
+        app = msal.ConfidentialClientApplication(
+            self.client_id,
+            authority=authority,
+            client_credential=self.tenant.client_secret
+        )
+
+        # Request token for Exchange Online
+        scopes = ["https://outlook.office365.com/.default"]
+        result = app.acquire_token_for_client(scopes=scopes)
+
+        if "access_token" in result:
+            self._access_token = result["access_token"]
+            logger.info(f"Acquired Exchange Online access token for tenant: {self.tenant.name}")
+        else:
+            error = result.get("error_description", result.get("error", "Unknown error"))
+            raise MS365AuthenticationError(
+                f"Failed to acquire Exchange Online token: {error}"
+            )
 
     def get_message_traces(
         self,
@@ -915,14 +948,16 @@ Connect-ExchangeOnline `
     -ShowBanner:$false
 '''
         else:
+            # Use access token authentication for client secret
+            # This requires ExchangeOnlineManagement module v3.0.0 or later
+            if not self._access_token:
+                raise MS365AuthenticationError(
+                    "Access token not available. Call authenticate() first."
+                )
             connect_cmd = f'''
-$secureSecret = ConvertTo-SecureString -String "{self.tenant.client_secret}" -AsPlainText -Force
-$credential = New-Object System.Management.Automation.PSCredential("{self.client_id}", $secureSecret)
-
 Connect-ExchangeOnline `
-    -AppId "{self.client_id}" `
+    -AccessToken "{self._access_token}" `
     -Organization "{self.tenant.organization}" `
-    -Credential $credential `
     -ShowBanner:$false
 '''
 
