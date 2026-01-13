@@ -211,10 +211,11 @@ MESSAGE_TRACE_LOOKBACK_DAYS = env.int('MESSAGE_TRACE_LOOKBACK_DAYS', default=1)
 # Records per page for API calls (Graph API limit is 1000, PowerShell limit is 5000)
 MESSAGE_TRACE_PAGE_SIZE = env.int('MESSAGE_TRACE_PAGE_SIZE', default=1000)
 
-# Maximum total records to retrieve in a single pull operation
-# Set to 0 for unlimited (will paginate through all results)
-# Default is 10000 to prevent excessive pulls, set higher if needed
-MESSAGE_TRACE_MAX_RECORDS = env.int('MESSAGE_TRACE_MAX_RECORDS', default=10000)
+# Maximum records to retrieve in a single pull operation
+# Note: Get-MessageTraceV2 (PowerShell) has a hard limit of 5000 records per call
+# For more records, use smaller date ranges or multiple pulls
+# Default is 5000 (PowerShell max), set lower if needed
+MESSAGE_TRACE_MAX_RECORDS = env.int('MESSAGE_TRACE_MAX_RECORDS', default=5000)
 
 # Logging Configuration
 LOGGING = {

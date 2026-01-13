@@ -538,9 +538,10 @@ Connect-ExchangeOnline `
 '''
 
         # PowerShell script to retrieve message traces
-        # Get-MessageTraceV2 supports up to 5000 records per call with ResultSize
-        # For larger datasets, we use Page parameter for pagination
-        max_records_check = f'$maxRecords = {max_records}' if max_records > 0 else '$maxRecords = [int]::MaxValue'
+        # Get-MessageTraceV2 returns up to 5000 records with ResultSize parameter
+        # Note: Unlike Get-MessageTrace, Get-MessageTraceV2 doesn't support Page/Skip pagination
+        # For more than 5000 records, use smaller date ranges
+        effective_limit = min(ps_page_size, max_records) if max_records > 0 else ps_page_size
         ps_script = f'''
 $ErrorActionPreference = "Stop"
 
@@ -551,45 +552,20 @@ try {{
     # Connect to Exchange Online
     {connect_cmd}
 
-    # Pagination settings
-    $pageSize = {ps_page_size}
-    {max_records_check}
-    $page = 1
-    $allTraces = @()
-
-    # Paginate through results using Page parameter
-    do {{
-        $traces = Get-MessageTraceV2 `
-            -StartDate "{start_str}" `
-            -EndDate "{end_str}" `
-            -ResultSize $pageSize `
-            -Page $page `
-            -ErrorAction Stop `
-            -WarningAction SilentlyContinue |
-            Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
-                Subject, Status, ToIP, FromIP, Size, MessageTraceId
-
-        if ($traces) {{
-            # Handle single result (PowerShell doesn't return array for single item)
-            if ($traces -isnot [Array]) {{
-                $traces = @($traces)
-            }}
-            $allTraces += $traces
-            $page++
-        }} else {{
-            break
-        }}
-
-        # Check if we've hit the max records limit
-        if ($allTraces.Count -ge $maxRecords) {{
-            $allTraces = $allTraces[0..($maxRecords - 1)]
-            break
-        }}
-    }} while ($traces.Count -eq $pageSize)
+    # Get message traces using the V2 cmdlet
+    # Note: Get-MessageTraceV2 supports up to 5000 records per call
+    $traces = Get-MessageTraceV2 `
+        -StartDate "{start_str}" `
+        -EndDate "{end_str}" `
+        -ResultSize {effective_limit} `
+        -ErrorAction Stop `
+        -WarningAction SilentlyContinue |
+        Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
+            Subject, Status, ToIP, FromIP, Size, MessageTraceId
 
     # Output as JSON
-    if ($allTraces.Count -gt 0) {{
-        $allTraces | ConvertTo-Json -Depth 10 -Compress
+    if ($traces) {{
+        $traces | ConvertTo-Json -Depth 10 -Compress
     }}
 
     # Disconnect
@@ -996,8 +972,10 @@ Connect-ExchangeOnline `
     -ShowBanner:$false
 '''
 
-        # PowerShell script with pagination support using Page parameter
-        max_records_check = f'$maxRecords = {max_records}' if max_records > 0 else '$maxRecords = [int]::MaxValue'
+        # PowerShell script to retrieve message traces
+        # Get-MessageTraceV2 returns up to 5000 records with ResultSize parameter
+        # Note: Unlike Get-MessageTrace, Get-MessageTraceV2 doesn't support Page/Skip pagination
+        effective_limit = min(ps_page_size, max_records) if max_records > 0 else ps_page_size
         ps_script = f'''
 $ErrorActionPreference = "Stop"
 
@@ -1005,45 +983,19 @@ try {{
     Import-Module ExchangeOnlineManagement -ErrorAction Stop
     {connect_cmd}
 
-    # Pagination settings
-    $pageSize = {ps_page_size}
-    {max_records_check}
-    $page = 1
-    $allTraces = @()
-
-    # Paginate through results using Page parameter
-    do {{
-        $traces = Get-MessageTraceV2 `
-            -StartDate "{start_str}" `
-            -EndDate "{end_str}" `
-            -ResultSize $pageSize `
-            -Page $page `
-            -ErrorAction Stop `
-            -WarningAction SilentlyContinue |
-            Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
-                Subject, Status, ToIP, FromIP, Size, MessageTraceId
-
-        if ($traces) {{
-            # Handle single result (PowerShell doesn't return array for single item)
-            if ($traces -isnot [Array]) {{
-                $traces = @($traces)
-            }}
-            $allTraces += $traces
-            $page++
-        }} else {{
-            break
-        }}
-
-        # Check if we've hit the max records limit
-        if ($allTraces.Count -ge $maxRecords) {{
-            $allTraces = $allTraces[0..($maxRecords - 1)]
-            break
-        }}
-    }} while ($traces.Count -eq $pageSize)
+    # Get message traces using the V2 cmdlet
+    $traces = Get-MessageTraceV2 `
+        -StartDate "{start_str}" `
+        -EndDate "{end_str}" `
+        -ResultSize {effective_limit} `
+        -ErrorAction Stop `
+        -WarningAction SilentlyContinue |
+        Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
+            Subject, Status, ToIP, FromIP, Size, MessageTraceId
 
     # Output as JSON
-    if ($allTraces.Count -gt 0) {{
-        $allTraces | ConvertTo-Json -Depth 10 -Compress
+    if ($traces) {{
+        $traces | ConvertTo-Json -Depth 10 -Compress
     }}
 
     Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
