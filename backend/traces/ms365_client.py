@@ -543,28 +543,14 @@ try {{
 
     # Get message traces using the V2 cmdlet (recommended as of Jan 2026)
     # V2 cmdlet provides better performance and additional fields
-    $traces = @()
-
-    try {{
-        $traces = Get-MessageTraceV2 `
-            -StartDate "{start_str}" `
-            -EndDate "{end_str}" `
-            -PageSize {page_size} `
-            -ErrorAction Stop |
-            Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
-                Subject, Status, ToIP, FromIP, Size, MessageTraceId
-    }}
-    catch {{
-        # Fallback to legacy cmdlet if V2 not available
-        Write-Warning "Get-MessageTraceV2 not available, using Get-MessageTrace"
-        $traces = Get-MessageTrace `
-            -StartDate "{start_str}" `
-            -EndDate "{end_str}" `
-            -PageSize {page_size} `
-            -ErrorAction Stop |
-            Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
-                Subject, Status, ToIP, FromIP, Size, MessageTraceId
-    }}
+    # Note: Get-MessageTrace is deprecated - only Get-MessageTraceV2 should be used
+    $traces = Get-MessageTraceV2 `
+        -StartDate "{start_str}" `
+        -EndDate "{end_str}" `
+        -PageSize {page_size} `
+        -ErrorAction Stop |
+        Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
+            Subject, Status, ToIP, FromIP, Size, MessageTraceId
 
     # Output as JSON
     $traces | ConvertTo-Json -Depth 10 -Compress
@@ -968,27 +954,15 @@ try {{
     Import-Module ExchangeOnlineManagement -ErrorAction Stop
     {connect_cmd}
 
-    $traces = @()
-
-    try {{
-        $traces = Get-MessageTraceV2 `
-            -StartDate "{start_str}" `
-            -EndDate "{end_str}" `
-            -PageSize {page_size} `
-            -ErrorAction Stop |
-            Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
-                Subject, Status, ToIP, FromIP, Size, MessageTraceId
-    }}
-    catch {{
-        Write-Warning "Get-MessageTraceV2 not available, using Get-MessageTrace"
-        $traces = Get-MessageTrace `
-            -StartDate "{start_str}" `
-            -EndDate "{end_str}" `
-            -PageSize {page_size} `
-            -ErrorAction Stop |
-            Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
-                Subject, Status, ToIP, FromIP, Size, MessageTraceId
-    }}
+    # Get message traces using the V2 cmdlet (recommended as of Jan 2026)
+    # Note: Get-MessageTrace is deprecated - only Get-MessageTraceV2 should be used
+    $traces = Get-MessageTraceV2 `
+        -StartDate "{start_str}" `
+        -EndDate "{end_str}" `
+        -PageSize {page_size} `
+        -ErrorAction Stop |
+        Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
+            Subject, Status, ToIP, FromIP, Size, MessageTraceId
 
     $traces | ConvertTo-Json -Depth 10 -Compress
     Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
