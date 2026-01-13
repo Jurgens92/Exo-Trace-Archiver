@@ -547,7 +547,7 @@ try {{
     $traces = Get-MessageTraceV2 `
         -StartDate "{start_str}" `
         -EndDate "{end_str}" `
-        -PageSize {page_size} `
+        -ResultSize {page_size} `
         -ErrorAction Stop |
         Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
             Subject, Status, ToIP, FromIP, Size, MessageTraceId
@@ -959,7 +959,7 @@ try {{
     $traces = Get-MessageTraceV2 `
         -StartDate "{start_str}" `
         -EndDate "{end_str}" `
-        -PageSize {page_size} `
+        -ResultSize {page_size} `
         -ErrorAction Stop |
         Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
             Subject, Status, ToIP, FromIP, Size, MessageTraceId
