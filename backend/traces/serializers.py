@@ -127,7 +127,7 @@ class ManualPullRequestSerializer(serializers.Serializer):
     )
     end_date = serializers.DateTimeField(
         required=False,
-        help_text="End of date range to pull (default: yesterday 23:59 UTC)"
+        help_text="End of date range to pull (default: current time - allows pulling up to today)"
     )
 
     def validate(self, data):

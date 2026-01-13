@@ -193,7 +193,7 @@ class ManualPullView(views.APIView):
         {
             "tenant_id": 1,                            // required: which tenant to pull from
             "start_date": "2024-01-01T00:00:00Z",      // default: yesterday 00:00 UTC
-            "end_date": "2024-01-01T23:59:59Z"         // default: yesterday 23:59 UTC
+            "end_date": "2024-01-01T23:59:59Z"         // default: current time (up to today)
         }
 
     Note: Exchange Online only retains message traces for 10 days,
@@ -237,7 +237,8 @@ class ManualPullView(views.APIView):
                     status=status.HTTP_403_FORBIDDEN
                 )
 
-        # Get date range from request or use defaults (yesterday)
+        # Get date range from request or use defaults
+        # Default: yesterday 00:00 to now (allows pulling up to today)
         now = timezone.now()
         yesterday = now - timedelta(days=1)
 
@@ -247,7 +248,7 @@ class ManualPullView(views.APIView):
         )
         end_date = serializer.validated_data.get(
             'end_date',
-            yesterday.replace(hour=23, minute=59, second=59, microsecond=999999)
+            now  # Default to current time instead of yesterday, allows pulling up to today
         )
 
         logger.info(
