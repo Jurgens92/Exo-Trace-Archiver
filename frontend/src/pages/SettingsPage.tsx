@@ -1,24 +1,42 @@
-import { useState } from 'react'
-import { RefreshCw, Play, Check, X, AlertCircle } from 'lucide-react'
+import { RefreshCw, Play, Check, X, AlertCircle, AlertTriangle } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 import { useConfig } from '@/hooks/useDashboard'
 import { useManualPull } from '@/hooks/usePullHistory'
 import { LoadingPage, LoadingSpinner } from '@/components/LoadingSpinner'
 import { useToast } from '@/components/ui/use-toast'
+import { useTenantContext } from '@/hooks/useTenantContext'
+import { useQuery } from '@tanstack/react-query'
+import { getTenant } from '@/api/tenants'
 
 export function SettingsPage() {
   const { data: config, isLoading, error, refetch } = useConfig()
   const manualPull = useManualPull()
   const { toast } = useToast()
+  const { selectedTenant, hasTenantSelected } = useTenantContext()
+
+  // Fetch full tenant details when a tenant is selected
+  const { data: tenantDetails, isLoading: tenantLoading } = useQuery({
+    queryKey: ['tenant', selectedTenant?.id],
+    queryFn: () => getTenant(selectedTenant!.id),
+    enabled: hasTenantSelected,
+  })
 
   const handleManualPull = async () => {
+    if (!selectedTenant) {
+      toast({
+        title: 'No tenant selected',
+        description: 'Please select a tenant from the sidebar before pulling traces.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     try {
-      const result = await manualPull.mutateAsync({})
+      const result = await manualPull.mutateAsync({ tenant_id: selectedTenant.id })
       toast({
         title: 'Pull completed',
-        description: `Pulled ${result.records_pulled} records (${result.records_new} new)`,
+        description: `Pulled ${result.records_pulled} records (${result.records_new} new) for ${result.tenant_name}`,
       })
     } catch {
       toast({
@@ -69,66 +87,110 @@ export function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-4">
-            <Button
-              onClick={handleManualPull}
-              disabled={manualPull.isPending}
-            >
-              {manualPull.isPending ? (
-                <>
-                  <LoadingSpinner size="sm" className="mr-2" />
-                  Pulling...
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4 mr-2" />
-                  Pull Now
-                </>
-              )}
-            </Button>
-            <p className="text-sm text-muted-foreground">
-              Pulls yesterday's message traces by default
-            </p>
-          </div>
+          {!hasTenantSelected ? (
+            <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-md">
+              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                Select a tenant from the sidebar to enable manual pulls.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-4">
+                <Button
+                  onClick={handleManualPull}
+                  disabled={manualPull.isPending}
+                >
+                  {manualPull.isPending ? (
+                    <>
+                      <LoadingSpinner size="sm" className="mr-2" />
+                      Pulling...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4 mr-2" />
+                      Pull Now
+                    </>
+                  )}
+                </Button>
+                <p className="text-sm text-muted-foreground">
+                  Pulls yesterday's message traces for <span className="font-medium">{selectedTenant.name}</span>
+                </p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Microsoft 365 Configuration */}
+      {/* Tenant Configuration - shows selected tenant's config */}
       <Card>
         <CardHeader>
-          <CardTitle>Microsoft 365 Configuration</CardTitle>
+          <CardTitle>
+            {hasTenantSelected
+              ? `${selectedTenant.name} Configuration`
+              : 'Tenant Configuration'}
+          </CardTitle>
           <CardDescription>
-            Azure AD app registration and authentication settings
+            {hasTenantSelected
+              ? 'Azure AD app registration and authentication settings for the selected tenant'
+              : 'Select a tenant to view its configuration'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <ConfigItem
-              label="Tenant ID"
-              value={config.legacy_microsoft365?.tenant_id ?? 'Not configured'}
-            />
-            <ConfigItem
-              label="Client ID"
-              value={config.legacy_microsoft365?.client_id ?? 'Not configured'}
-            />
-            <ConfigItem
-              label="Auth Method"
-              value={config.legacy_microsoft365?.auth_method ?? 'Not configured'}
-            />
-            <ConfigItem
-              label="API Method"
-              value={config.legacy_microsoft365?.api_method ?? 'Not configured'}
-            />
-            <ConfigItem
-              label="Organization"
-              value={config.legacy_microsoft365?.organization ?? 'Not configured'}
-            />
-            <ConfigItem
-              label="Certificate"
-              value={config.legacy_microsoft365?.certificate_configured ?? false}
-              type="boolean"
-            />
-          </div>
+          {!hasTenantSelected ? (
+            <p className="text-sm text-muted-foreground">
+              No tenant selected. Choose a tenant from the sidebar to see its configuration.
+            </p>
+          ) : tenantLoading ? (
+            <div className="flex items-center gap-2">
+              <LoadingSpinner size="sm" />
+              <span className="text-sm text-muted-foreground">Loading tenant configuration...</span>
+            </div>
+          ) : tenantDetails ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <ConfigItem
+                label="Tenant ID"
+                value={tenantDetails.tenant_id}
+              />
+              <ConfigItem
+                label="Client ID"
+                value={tenantDetails.client_id_masked ?? 'Not configured'}
+              />
+              <ConfigItem
+                label="Auth Method"
+                value={tenantDetails.auth_method}
+              />
+              <ConfigItem
+                label="API Method"
+                value={tenantDetails.api_method}
+              />
+              <ConfigItem
+                label="Organization"
+                value={tenantDetails.organization || 'Not set'}
+              />
+              <ConfigItem
+                label="Certificate"
+                value={tenantDetails.has_certificate ?? false}
+                type="boolean"
+              />
+              <ConfigItem
+                label="Client Secret"
+                value={tenantDetails.has_client_secret ?? false}
+                type="boolean"
+              />
+              <ConfigItem
+                label="Status"
+                value={tenantDetails.is_active}
+                type="boolean"
+                trueLabel="Active"
+                falseLabel="Inactive"
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Unable to load tenant configuration.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -195,9 +257,11 @@ interface ConfigItemProps {
   label: string
   value: string | number | boolean
   type?: 'text' | 'boolean'
+  trueLabel?: string
+  falseLabel?: string
 }
 
-function ConfigItem({ label, value, type = 'text' }: ConfigItemProps) {
+function ConfigItem({ label, value, type = 'text', trueLabel = 'Configured', falseLabel = 'Not configured' }: ConfigItemProps) {
   return (
     <div className="space-y-1">
       <p className="text-sm font-medium text-muted-foreground">{label}</p>
@@ -206,12 +270,12 @@ function ConfigItem({ label, value, type = 'text' }: ConfigItemProps) {
           {value ? (
             <>
               <Check className="h-4 w-4 text-green-500" />
-              <span>Configured</span>
+              <span>{trueLabel}</span>
             </>
           ) : (
             <>
               <X className="h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground">Not configured</span>
+              <span className="text-muted-foreground">{falseLabel}</span>
             </>
           )}
         </div>
