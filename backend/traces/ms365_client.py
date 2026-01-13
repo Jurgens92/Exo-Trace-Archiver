@@ -537,11 +537,9 @@ Connect-ExchangeOnline `
     -ShowBanner:$false
 '''
 
-        # PowerShell script to retrieve message traces
-        # Get-MessageTraceV2 returns up to 5000 records with ResultSize parameter
-        # Note: Unlike Get-MessageTrace, Get-MessageTraceV2 doesn't support Page/Skip pagination
-        # For more than 5000 records, use smaller date ranges
-        effective_limit = min(ps_page_size, max_records) if max_records > 0 else ps_page_size
+        # PowerShell script to retrieve message traces using Get-MessageTraceV2
+        # Get-MessageTraceV2 has a max of 5000 records and doesn't support pagination
+        # To get all records, we chunk the date range into smaller periods
         ps_script = f'''
 $ErrorActionPreference = "Stop"
 
@@ -552,20 +550,50 @@ try {{
     # Connect to Exchange Online
     {connect_cmd}
 
-    # Get message traces using the V2 cmdlet
-    # Note: Get-MessageTraceV2 supports up to 5000 records per call
-    $traces = Get-MessageTraceV2 `
-        -StartDate "{start_str}" `
-        -EndDate "{end_str}" `
-        -ResultSize {effective_limit} `
-        -ErrorAction Stop `
-        -WarningAction SilentlyContinue |
-        Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
-            Subject, Status, ToIP, FromIP, Size, MessageTraceId
+    # Get-MessageTraceV2 configuration
+    $resultSize = {ps_page_size}
+    $maxRecords = {max_records if max_records > 0 else '[int]::MaxValue'}
+    $allTraces = @()
+
+    # Date range chunking - split into 4-hour intervals to avoid 5000 record limit
+    $startDate = [DateTime]::Parse("{start_str}")
+    $endDate = [DateTime]::Parse("{end_str}")
+    $chunkHours = 4
+    $currentStart = $startDate
+
+    while ($currentStart -lt $endDate -and $allTraces.Count -lt $maxRecords) {{
+        $currentEnd = $currentStart.AddHours($chunkHours)
+        if ($currentEnd -gt $endDate) {{
+            $currentEnd = $endDate
+        }}
+
+        $traces = Get-MessageTraceV2 `
+            -StartDate $currentStart `
+            -EndDate $currentEnd `
+            -ResultSize $resultSize `
+            -ErrorAction Stop `
+            -WarningAction SilentlyContinue |
+            Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
+                Subject, Status, ToIP, FromIP, Size, MessageTraceId
+
+        if ($traces) {{
+            if ($traces -isnot [Array]) {{
+                $traces = @($traces)
+            }}
+            $allTraces += $traces
+        }}
+
+        $currentStart = $currentEnd
+    }}
+
+    # Trim to max records if needed
+    if ($allTraces.Count -gt $maxRecords) {{
+        $allTraces = $allTraces[0..($maxRecords - 1)]
+    }}
 
     # Output as JSON
-    if ($traces) {{
-        $traces | ConvertTo-Json -Depth 10 -Compress
+    if ($allTraces.Count -gt 0) {{
+        $allTraces | ConvertTo-Json -Depth 10 -Compress
     }}
 
     # Disconnect
@@ -972,10 +1000,9 @@ Connect-ExchangeOnline `
     -ShowBanner:$false
 '''
 
-        # PowerShell script to retrieve message traces
-        # Get-MessageTraceV2 returns up to 5000 records with ResultSize parameter
-        # Note: Unlike Get-MessageTrace, Get-MessageTraceV2 doesn't support Page/Skip pagination
-        effective_limit = min(ps_page_size, max_records) if max_records > 0 else ps_page_size
+        # PowerShell script to retrieve message traces using Get-MessageTraceV2
+        # Get-MessageTraceV2 has a max of 5000 records and doesn't support pagination
+        # To get all records, we chunk the date range into smaller periods
         ps_script = f'''
 $ErrorActionPreference = "Stop"
 
@@ -983,19 +1010,50 @@ try {{
     Import-Module ExchangeOnlineManagement -ErrorAction Stop
     {connect_cmd}
 
-    # Get message traces using the V2 cmdlet
-    $traces = Get-MessageTraceV2 `
-        -StartDate "{start_str}" `
-        -EndDate "{end_str}" `
-        -ResultSize {effective_limit} `
-        -ErrorAction Stop `
-        -WarningAction SilentlyContinue |
-        Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
-            Subject, Status, ToIP, FromIP, Size, MessageTraceId
+    # Get-MessageTraceV2 configuration
+    $resultSize = {ps_page_size}
+    $maxRecords = {max_records if max_records > 0 else '[int]::MaxValue'}
+    $allTraces = @()
+
+    # Date range chunking - split into 4-hour intervals to avoid 5000 record limit
+    $startDate = [DateTime]::Parse("{start_str}")
+    $endDate = [DateTime]::Parse("{end_str}")
+    $chunkHours = 4
+    $currentStart = $startDate
+
+    while ($currentStart -lt $endDate -and $allTraces.Count -lt $maxRecords) {{
+        $currentEnd = $currentStart.AddHours($chunkHours)
+        if ($currentEnd -gt $endDate) {{
+            $currentEnd = $endDate
+        }}
+
+        $traces = Get-MessageTraceV2 `
+            -StartDate $currentStart `
+            -EndDate $currentEnd `
+            -ResultSize $resultSize `
+            -ErrorAction Stop `
+            -WarningAction SilentlyContinue |
+            Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
+                Subject, Status, ToIP, FromIP, Size, MessageTraceId
+
+        if ($traces) {{
+            if ($traces -isnot [Array]) {{
+                $traces = @($traces)
+            }}
+            $allTraces += $traces
+        }}
+
+        $currentStart = $currentEnd
+    }}
+
+    # Trim to max records if needed
+    if ($allTraces.Count -gt $maxRecords) {{
+        $allTraces = $allTraces[0..($maxRecords - 1)]
+    }}
 
     # Output as JSON
-    if ($traces) {{
-        $traces | ConvertTo-Json -Depth 10 -Compress
+    if ($allTraces.Count -gt 0) {{
+        $allTraces | ConvertTo-Json -Depth 10 -Compress
     }}
 
     Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
