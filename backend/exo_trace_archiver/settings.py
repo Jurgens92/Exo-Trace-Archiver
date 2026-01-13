@@ -212,10 +212,10 @@ MESSAGE_TRACE_LOOKBACK_DAYS = env.int('MESSAGE_TRACE_LOOKBACK_DAYS', default=1)
 MESSAGE_TRACE_PAGE_SIZE = env.int('MESSAGE_TRACE_PAGE_SIZE', default=1000)
 
 # Maximum records to retrieve in a single pull operation
-# Note: Get-MessageTraceV2 (PowerShell) has a hard limit of 5000 records per call
-# For more records, use smaller date ranges or multiple pulls
-# Default is 5000 (PowerShell max), set lower if needed
-MESSAGE_TRACE_MAX_RECORDS = env.int('MESSAGE_TRACE_MAX_RECORDS', default=5000)
+# Using Get-MessageTrace (legacy) which supports pagination via -Page parameter
+# Set to 0 for unlimited, or set a limit to prevent very long pulls
+# Default is 50000 which should cover most scenarios
+MESSAGE_TRACE_MAX_RECORDS = env.int('MESSAGE_TRACE_MAX_RECORDS', default=50000)
 
 # Logging Configuration
 LOGGING = {
