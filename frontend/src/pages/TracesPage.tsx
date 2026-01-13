@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Search, Filter, X, Building2 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -33,12 +33,36 @@ const PAGE_SIZE = 50
 
 export function TracesPage() {
   const { selectedTenant } = useTenantContext()
-  const [filters, setFilters] = useState<TraceFilterParams>({
-    page: 1,
-    page_size: PAGE_SIZE,
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // Initialize filters from URL query parameters
+  const getInitialFilters = (): TraceFilterParams => {
+    const initial: TraceFilterParams = {
+      page: 1,
+      page_size: PAGE_SIZE,
+    }
+    const status = searchParams.get('status')
+    const direction = searchParams.get('direction')
+    const search = searchParams.get('search')
+    const startDate = searchParams.get('start_date')
+    const endDate = searchParams.get('end_date')
+
+    if (status) initial.status = status as TraceFilterParams['status']
+    if (direction) initial.direction = direction as TraceFilterParams['direction']
+    if (search) initial.search = search
+    if (startDate) initial.start_date = startDate
+    if (endDate) initial.end_date = endDate
+
+    return initial
+  }
+
+  const [filters, setFilters] = useState<TraceFilterParams>(getInitialFilters)
+  // Show filters panel if URL has filter params
+  const [showFilters, setShowFilters] = useState(() => {
+    return !!(searchParams.get('status') || searchParams.get('direction') ||
+              searchParams.get('start_date') || searchParams.get('end_date'))
   })
-  const [showFilters, setShowFilters] = useState(false)
-  const [searchInput, setSearchInput] = useState('')
+  const [searchInput, setSearchInput] = useState(searchParams.get('search') || '')
 
   // Combine user filters with tenant filter
   const effectiveFilters = useMemo(() => {
@@ -50,6 +74,17 @@ export function TracesPage() {
   }, [filters, selectedTenant])
 
   const { data, isLoading, error, refetch } = useTraces(effectiveFilters)
+
+  // Update URL when filters change (except page and page_size)
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (filters.status) params.set('status', filters.status)
+    if (filters.direction) params.set('direction', filters.direction)
+    if (filters.search) params.set('search', filters.search)
+    if (filters.start_date) params.set('start_date', filters.start_date)
+    if (filters.end_date) params.set('end_date', filters.end_date)
+    setSearchParams(params, { replace: true })
+  }, [filters.status, filters.direction, filters.search, filters.start_date, filters.end_date, setSearchParams])
 
   // Reset to page 1 when tenant changes
   useEffect(() => {
@@ -75,6 +110,7 @@ export function TracesPage() {
   const clearFilters = () => {
     setFilters({ page: 1, page_size: PAGE_SIZE })
     setSearchInput('')
+    setSearchParams({}, { replace: true })  // Clear URL params
   }
 
   const totalPages = data ? Math.ceil(data.count / PAGE_SIZE) : 0

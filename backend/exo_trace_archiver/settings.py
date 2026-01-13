@@ -208,8 +208,13 @@ MS365_ORGANIZATION = env('MS365_ORGANIZATION', default='')
 # Default lookback period in days (Exchange Online keeps traces for 10 days)
 MESSAGE_TRACE_LOOKBACK_DAYS = env.int('MESSAGE_TRACE_LOOKBACK_DAYS', default=1)
 
-# Maximum records per API call (Graph API limit is 1000)
+# Records per page for API calls (Graph API limit is 1000, PowerShell limit is 5000)
 MESSAGE_TRACE_PAGE_SIZE = env.int('MESSAGE_TRACE_PAGE_SIZE', default=1000)
+
+# Maximum total records to retrieve in a single pull operation
+# Set to 0 for unlimited (will paginate through all results)
+# Default is 10000 to prevent excessive pulls, set higher if needed
+MESSAGE_TRACE_MAX_RECORDS = env.int('MESSAGE_TRACE_MAX_RECORDS', default=10000)
 
 # Logging Configuration
 LOGGING = {

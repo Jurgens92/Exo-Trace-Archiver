@@ -182,7 +182,7 @@ class TenantListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tenant
         fields = [
-            'id', 'name', 'tenant_id', 'organization',
+            'id', 'name', 'tenant_id', 'organization', 'domains',
             'auth_method', 'api_method', 'is_active',
             'created_at', 'user_count'
         ]
@@ -210,7 +210,7 @@ class TenantDetailSerializer(serializers.ModelSerializer):
         model = Tenant
         fields = [
             'id', 'name', 'tenant_id', 'client_id', 'client_id_masked',
-            'organization', 'auth_method', 'api_method',
+            'organization', 'domains', 'auth_method', 'api_method',
             'certificate_path', 'certificate_thumbprint',
             'has_client_secret', 'has_certificate',
             'is_active', 'created_at', 'updated_at',
@@ -245,7 +245,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             'name', 'tenant_id', 'client_id',
             'auth_method', 'client_secret',
             'certificate_path', 'certificate_thumbprint', 'certificate_password',
-            'api_method', 'organization', 'is_active'
+            'api_method', 'organization', 'domains', 'is_active'
         ]
 
     def validate_tenant_id(self, value):
@@ -308,7 +308,7 @@ class TenantUpdateSerializer(serializers.ModelSerializer):
             'name', 'client_id',
             'auth_method', 'client_secret',
             'certificate_path', 'certificate_thumbprint', 'certificate_password',
-            'api_method', 'organization', 'is_active'
+            'api_method', 'organization', 'domains', 'is_active'
         ]
 
     def validate(self, attrs):

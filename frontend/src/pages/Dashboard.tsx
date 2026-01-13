@@ -54,16 +54,16 @@ export function Dashboard() {
   ]
 
   const statusStats = [
-    { label: 'Delivered', value: data.delivered_count, icon: CheckCircle, color: 'text-green-500' },
-    { label: 'Failed', value: data.failed_count, icon: XCircle, color: 'text-red-500' },
-    { label: 'Pending', value: data.pending_count, icon: Clock, color: 'text-yellow-500' },
-    { label: 'Quarantined', value: data.quarantined_count, icon: XCircle, color: 'text-purple-500' },
+    { label: 'Delivered', value: data.delivered_count, icon: CheckCircle, color: 'text-green-500', filter: 'Delivered' },
+    { label: 'Failed', value: data.failed_count, icon: XCircle, color: 'text-red-500', filter: 'Failed' },
+    { label: 'Pending', value: data.pending_count, icon: Clock, color: 'text-yellow-500', filter: 'Pending' },
+    { label: 'Quarantined', value: data.quarantined_count, icon: XCircle, color: 'text-purple-500', filter: 'Quarantined' },
   ]
 
   const directionStats = [
-    { label: 'Inbound', value: data.inbound_count, icon: ArrowDownRight, color: 'text-blue-500' },
-    { label: 'Outbound', value: data.outbound_count, icon: ArrowUpRight, color: 'text-green-500' },
-    { label: 'Internal', value: data.internal_count, icon: ArrowLeftRight, color: 'text-gray-500' },
+    { label: 'Inbound', value: data.inbound_count, icon: ArrowDownRight, color: 'text-blue-500', filter: 'Inbound' },
+    { label: 'Outbound', value: data.outbound_count, icon: ArrowUpRight, color: 'text-green-500', filter: 'Outbound' },
+    { label: 'Internal', value: data.internal_count, icon: ArrowLeftRight, color: 'text-gray-500', filter: 'Internal' },
   ]
 
   return (
@@ -101,15 +101,19 @@ export function Dashboard() {
             <CardTitle>Status Breakdown</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="space-y-2">
               {statusStats.map((stat) => (
-                <div key={stat.label} className="flex items-center justify-between">
+                <Link
+                  key={stat.label}
+                  to={`/traces?status=${stat.filter}`}
+                  className="flex items-center justify-between p-2 rounded-md hover:bg-muted transition-colors cursor-pointer"
+                >
                   <div className="flex items-center gap-2">
                     <stat.icon className={`h-4 w-4 ${stat.color}`} />
                     <span className="text-sm">{stat.label}</span>
                   </div>
                   <span className="font-semibold">{stat.value.toLocaleString()}</span>
-                </div>
+                </Link>
               ))}
             </div>
           </CardContent>
@@ -120,15 +124,19 @@ export function Dashboard() {
             <CardTitle>Direction Breakdown</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
+            <div className="space-y-2">
               {directionStats.map((stat) => (
-                <div key={stat.label} className="flex items-center justify-between">
+                <Link
+                  key={stat.label}
+                  to={`/traces?direction=${stat.filter}`}
+                  className="flex items-center justify-between p-2 rounded-md hover:bg-muted transition-colors cursor-pointer"
+                >
                   <div className="flex items-center gap-2">
                     <stat.icon className={`h-4 w-4 ${stat.color}`} />
                     <span className="text-sm">{stat.label}</span>
                   </div>
                   <span className="font-semibold">{stat.value.toLocaleString()}</span>
-                </div>
+                </Link>
               ))}
             </div>
           </CardContent>

@@ -137,6 +137,14 @@ class Tenant(models.Model):
         help_text="Exchange organization name (e.g., contoso.onmicrosoft.com)"
     )
 
+    # Organization email domains for direction detection
+    # Comma-separated list of domains (e.g., "contoso.com,contoso.onmicrosoft.com,contoso.mail.onmicrosoft.com")
+    domains = models.TextField(
+        blank=True,
+        default='',
+        help_text="Comma-separated list of organization email domains for direction detection (e.g., contoso.com,contoso.onmicrosoft.com)"
+    )
+
     # Tenant status
     is_active = models.BooleanField(
         default=True,
@@ -173,19 +181,29 @@ class Tenant(models.Model):
         """
         Get list of organization domains for direction detection.
 
-        Returns domains from the organization field.
+        Returns domains from:
+        1. The explicit 'domains' field (comma-separated)
+        2. The 'organization' field as fallback
         """
-        if not self.organization:
-            return []
+        result = []
 
-        domains = [self.organization.lower()]
+        # First, use the explicit domains field if configured
+        if self.domains:
+            for domain in self.domains.split(','):
+                domain = domain.strip().lower()
+                if domain and domain not in result:
+                    result.append(domain)
 
-        # If it's an onmicrosoft.com domain, also add the base domain
-        if '.onmicrosoft.com' in self.organization.lower():
-            base_domain = self.organization.lower().replace('.onmicrosoft.com', '.com')
-            domains.append(base_domain)
+        # If no explicit domains, fall back to organization field
+        if not result and self.organization:
+            result.append(self.organization.lower())
+            # If it's an onmicrosoft.com domain, also add the base domain
+            if '.onmicrosoft.com' in self.organization.lower():
+                base_domain = self.organization.lower().replace('.onmicrosoft.com', '.com')
+                if base_domain not in result:
+                    result.append(base_domain)
 
-        return domains
+        return result
 
 
 class TenantPermission(models.Model):

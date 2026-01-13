@@ -496,12 +496,20 @@ class PowerShellClient(BaseMS365Client):
 
         Uses Get-MessageTraceV2 cmdlet which is the recommended
         cmdlet as of January 2026 (replaces legacy Get-MessageTrace).
+
+        Supports pagination to retrieve more than the per-page limit.
         """
         ps_executable = self._get_powershell_executable()
 
         # Format dates for PowerShell
         start_str = start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
         end_str = end_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Get max records limit from settings (0 = unlimited)
+        max_records = getattr(settings, 'MESSAGE_TRACE_MAX_RECORDS', 10000)
+
+        # PowerShell's Get-MessageTraceV2 has a max ResultSize of 5000
+        ps_page_size = min(page_size, 5000)
 
         # Build the PowerShell script
         auth_method = settings.MS365_AUTH_METHOD
@@ -529,8 +537,9 @@ Connect-ExchangeOnline `
     -ShowBanner:$false
 '''
 
-        # PowerShell script to retrieve message traces
-        # Uses Get-MessageTraceV2 (recommended) with fallback to Get-MessageTrace
+        # PowerShell script to retrieve message traces with pagination support
+        # Uses Get-MessageTraceV2 (recommended) with -Skip parameter for pagination
+        max_records_check = f'$maxRecords = {max_records}' if max_records > 0 else '$maxRecords = [int]::MaxValue'
         ps_script = f'''
 $ErrorActionPreference = "Stop"
 
@@ -541,20 +550,46 @@ try {{
     # Connect to Exchange Online
     {connect_cmd}
 
-    # Get message traces using the V2 cmdlet (recommended as of Jan 2026)
-    # V2 cmdlet provides better performance and additional fields
-    # Note: Get-MessageTrace is deprecated - only Get-MessageTraceV2 should be used
-    $traces = Get-MessageTraceV2 `
-        -StartDate "{start_str}" `
-        -EndDate "{end_str}" `
-        -ResultSize {page_size} `
-        -ErrorAction Stop `
-        -WarningAction SilentlyContinue |
-        Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
-            Subject, Status, ToIP, FromIP, Size, MessageTraceId
+    # Pagination settings
+    $pageSize = {ps_page_size}
+    {max_records_check}
+    $skip = 0
+    $allTraces = @()
+
+    # Paginate through results
+    do {{
+        $traces = Get-MessageTraceV2 `
+            -StartDate "{start_str}" `
+            -EndDate "{end_str}" `
+            -ResultSize $pageSize `
+            -Skip $skip `
+            -ErrorAction Stop `
+            -WarningAction SilentlyContinue |
+            Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
+                Subject, Status, ToIP, FromIP, Size, MessageTraceId
+
+        if ($traces) {{
+            # Handle single result (PowerShell doesn't return array for single item)
+            if ($traces -isnot [Array]) {{
+                $traces = @($traces)
+            }}
+            $allTraces += $traces
+            $skip += $traces.Count
+        }} else {{
+            break
+        }}
+
+        # Check if we've hit the max records limit
+        if ($allTraces.Count -ge $maxRecords) {{
+            $allTraces = $allTraces[0..($maxRecords - 1)]
+            break
+        }}
+    }} while ($traces.Count -eq $pageSize)
 
     # Output as JSON
-    $traces | ConvertTo-Json -Depth 10 -Compress
+    if ($allTraces.Count -gt 0) {{
+        $allTraces | ConvertTo-Json -Depth 10 -Compress
+    }}
 
     # Disconnect
     Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
@@ -575,11 +610,13 @@ catch {{
             script_path = f.name
 
         try:
+            # Increase timeout for potentially large result sets
+            timeout = 600 if max_records == 0 or max_records > 5000 else 300
             result = subprocess.run(
                 [ps_executable, '-NoProfile', '-NonInteractive', '-File', script_path],
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 minute timeout
+                timeout=timeout
             )
 
             if result.returncode != 0:
@@ -605,7 +642,7 @@ catch {{
             return traces
 
         except subprocess.TimeoutExpired:
-            raise MS365APIError("PowerShell command timed out (5 minute limit)")
+            raise MS365APIError(f"PowerShell command timed out ({timeout // 60} minute limit)")
 
         finally:
             # Clean up temp file
@@ -920,11 +957,21 @@ class TenantPowerShellClient(PowerShellClient):
         end_date: datetime,
         page_size: int = 1000
     ) -> list[dict[str, Any]]:
-        """Retrieve message traces using Exchange Online PowerShell for this tenant."""
+        """
+        Retrieve message traces using Exchange Online PowerShell for this tenant.
+
+        Supports pagination to retrieve more than the per-page limit.
+        """
         ps_executable = self._get_powershell_executable()
 
         start_str = start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
         end_str = end_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Get max records limit from settings (0 = unlimited)
+        max_records = getattr(settings, 'MESSAGE_TRACE_MAX_RECORDS', 10000)
+
+        # PowerShell's Get-MessageTraceV2 has a max ResultSize of 5000
+        ps_page_size = min(page_size, 5000)
 
         if self.tenant.auth_method == 'certificate':
             connect_cmd = f'''
@@ -948,6 +995,8 @@ Connect-ExchangeOnline `
     -ShowBanner:$false
 '''
 
+        # PowerShell script with pagination support
+        max_records_check = f'$maxRecords = {max_records}' if max_records > 0 else '$maxRecords = [int]::MaxValue'
         ps_script = f'''
 $ErrorActionPreference = "Stop"
 
@@ -955,18 +1004,47 @@ try {{
     Import-Module ExchangeOnlineManagement -ErrorAction Stop
     {connect_cmd}
 
-    # Get message traces using the V2 cmdlet (recommended as of Jan 2026)
-    # Note: Get-MessageTrace is deprecated - only Get-MessageTraceV2 should be used
-    $traces = Get-MessageTraceV2 `
-        -StartDate "{start_str}" `
-        -EndDate "{end_str}" `
-        -ResultSize {page_size} `
-        -ErrorAction Stop `
-        -WarningAction SilentlyContinue |
-        Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
-            Subject, Status, ToIP, FromIP, Size, MessageTraceId
+    # Pagination settings
+    $pageSize = {ps_page_size}
+    {max_records_check}
+    $skip = 0
+    $allTraces = @()
 
-    $traces | ConvertTo-Json -Depth 10 -Compress
+    # Paginate through results
+    do {{
+        $traces = Get-MessageTraceV2 `
+            -StartDate "{start_str}" `
+            -EndDate "{end_str}" `
+            -ResultSize $pageSize `
+            -Skip $skip `
+            -ErrorAction Stop `
+            -WarningAction SilentlyContinue |
+            Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
+                Subject, Status, ToIP, FromIP, Size, MessageTraceId
+
+        if ($traces) {{
+            # Handle single result (PowerShell doesn't return array for single item)
+            if ($traces -isnot [Array]) {{
+                $traces = @($traces)
+            }}
+            $allTraces += $traces
+            $skip += $traces.Count
+        }} else {{
+            break
+        }}
+
+        # Check if we've hit the max records limit
+        if ($allTraces.Count -ge $maxRecords) {{
+            $allTraces = $allTraces[0..($maxRecords - 1)]
+            break
+        }}
+    }} while ($traces.Count -eq $pageSize)
+
+    # Output as JSON
+    if ($allTraces.Count -gt 0) {{
+        $allTraces | ConvertTo-Json -Depth 10 -Compress
+    }}
+
     Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
 }}
 catch {{
@@ -984,11 +1062,13 @@ catch {{
             script_path = f.name
 
         try:
+            # Increase timeout for potentially large result sets
+            timeout = 600 if max_records == 0 or max_records > 5000 else 300
             result = subprocess.run(
                 [ps_executable, '-NoProfile', '-NonInteractive', '-File', script_path],
                 capture_output=True,
                 text=True,
-                timeout=300
+                timeout=timeout
             )
 
             if result.returncode != 0:
@@ -1012,7 +1092,7 @@ catch {{
             return traces
 
         except subprocess.TimeoutExpired:
-            raise MS365APIError("PowerShell command timed out (5 minute limit)")
+            raise MS365APIError(f"PowerShell command timed out ({timeout // 60} minute limit)")
 
         finally:
             Path(script_path).unlink(missing_ok=True)
