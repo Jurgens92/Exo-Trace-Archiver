@@ -30,6 +30,7 @@ import logging
 import re
 import subprocess
 import tempfile
+import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from typing import Any
@@ -90,6 +91,61 @@ def sanitize_powershell_output(output: str) -> str:
     # We preserve \x09 (TAB), \x0A (LF), \x0D (CR) as they're valid in JSON strings
     control_char_pattern = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\x80-\x9F]')
     return control_char_pattern.sub('', output)
+
+
+def retry_with_backoff(
+    func,
+    *args,
+    max_retries: int = 3,
+    initial_delay: float = 1.0,
+    max_delay: float = 32.0,
+    **kwargs
+):
+    """
+    Execute a function with exponential backoff retry logic.
+
+    Particularly useful for handling Microsoft Graph API rate limits (429).
+
+    Args:
+        func: The function to call
+        max_retries: Maximum number of retry attempts
+        initial_delay: Initial delay in seconds (will double on each retry)
+        max_delay: Maximum delay between retries
+        *args, **kwargs: Arguments to pass to func
+
+    Returns:
+        The result of func() if successful
+
+    Raises:
+        MS365APIError: If all retries fail
+    """
+    last_exception = None
+    delay = initial_delay
+
+    for attempt in range(max_retries + 1):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            last_exception = e
+            
+            # Check if this is a 429 or 503 (rate limit or service unavailable)
+            is_rate_limit = (
+                hasattr(e, 'status_code') and e.status_code in (429, 503)
+            )
+            
+            if attempt < max_retries and is_rate_limit:
+                logger.warning(
+                    f"Rate limit or service unavailable (attempt {attempt + 1}/{max_retries + 1}). "
+                    f"Retrying in {delay:.1f} seconds... Error: {str(e)}"
+                )
+                time.sleep(delay)
+                # Exponential backoff with jitter
+                delay = min(delay * 2 + (0.1 * (attempt + 1)), max_delay)
+            else:
+                raise
+
+    # If we get here, all retries failed
+    raise last_exception
 
 
 class BaseMS365Client(ABC):
@@ -349,6 +405,78 @@ class GraphAPIClient(BaseMS365Client):
         if not self._access_token or (self._token_expiry and timezone.now() >= self._token_expiry):
             self.authenticate()
 
+    def _make_graph_request(self, url: str, headers: dict, params: dict = None, max_retries: int = 3):
+        """
+        Make a Graph API request with automatic retry handling for rate limits.
+
+        Args:
+            url: The API endpoint URL
+            headers: Request headers
+            params: Query parameters
+            max_retries: Maximum number of retries for rate limits
+
+        Returns:
+            Response object if successful
+
+        Raises:
+            MS365APIError: If the request fails
+        """
+        try:
+            import requests
+        except ImportError:
+            raise MS365APIError(
+                "requests library not installed. "
+                "Install it with: pip install requests"
+            )
+
+        delay = 1.0
+        last_exception = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                response = requests.get(url, headers=headers, params=params, timeout=30)
+
+                # Handle rate limiting (429) and service unavailable (503)
+                if response.status_code in (429, 503):
+                    # Get retry-after header if available
+                    retry_after = response.headers.get('Retry-After')
+                    if retry_after:
+                        try:
+                            delay = float(retry_after)
+                        except ValueError:
+                            pass
+
+                    if attempt < max_retries:
+                        logger.warning(
+                            f"Rate limit hit (HTTP {response.status_code}), "
+                            f"retry attempt {attempt + 1}/{max_retries + 1}, "
+                            f"waiting {delay:.1f}s..."
+                        )
+                        time.sleep(delay)
+                        # Exponential backoff for next attempt
+                        delay = min(delay * 2, 32.0)
+                        continue
+                    else:
+                        error_text = response.text
+                        raise MS365APIError(
+                            f"Graph API rate limit exceeded after {max_retries} retries: "
+                            f"{response.status_code} - {error_text}"
+                        )
+
+                return response
+
+            except requests.RequestException as e:
+                last_exception = MS365APIError(f"Network error calling Graph API: {str(e)}")
+                if attempt < max_retries:
+                    time.sleep(delay)
+                    delay = min(delay * 2, 32.0)
+                else:
+                    raise last_exception
+
+        if last_exception:
+            raise last_exception
+        raise MS365APIError("Request failed after retries")
+
     def get_message_traces(
         self,
         start_date: datetime,
@@ -357,6 +485,10 @@ class GraphAPIClient(BaseMS365Client):
     ) -> list[dict[str, Any]]:
         """
         Retrieve message traces using Microsoft Graph API.
+
+        Includes automatic retry logic for rate limits (429) and service
+        unavailability (503). Retries with exponential backoff and respects
+        the Retry-After header from Microsoft Graph.
 
         Note: As of Jan 2026, the exact endpoint for message traces
         may be in beta. This implementation uses the Reports API
@@ -401,7 +533,7 @@ class GraphAPIClient(BaseMS365Client):
 
         try:
             while url:
-                response = requests.get(url, headers=headers, params=params)
+                response = self._make_graph_request(url, headers, params)
 
                 if response.status_code == 401:
                     # Token expired, re-authenticate
@@ -451,6 +583,9 @@ class GraphAPIClient(BaseMS365Client):
         This is useful for auto-configuring the tenant's organization domains
         for direction classification.
 
+        Includes automatic retry logic for rate limits (429) and service
+        unavailability (503).
+
         Required Permission: Domain.Read.All (Application)
 
         Returns:
@@ -477,14 +612,14 @@ class GraphAPIClient(BaseMS365Client):
         url = f"{self.GRAPH_URL}/domains"
 
         try:
-            response = requests.get(url, headers=headers)
+            response = self._make_graph_request(url, headers)
 
             if response.status_code == 401:
                 # Token expired, re-authenticate and retry
                 self._access_token = None
                 self._ensure_authenticated()
                 headers["Authorization"] = f"Bearer {self._access_token}"
-                response = requests.get(url, headers=headers)
+                response = self._make_graph_request(url, headers)
 
             if response.status_code == 403:
                 raise MS365APIError(
