@@ -654,10 +654,12 @@ catch {{
 '''
 
         # Write script to temp file and execute
+        # Use UTF-8 encoding to handle extended ASCII characters in regex patterns
         with tempfile.NamedTemporaryFile(
             mode='w',
             suffix='.ps1',
-            delete=False
+            delete=False,
+            encoding='utf-8'
         ) as f:
             f.write(ps_script)
             script_path = f.name
@@ -669,7 +671,9 @@ catch {{
                 [ps_executable, '-NoProfile', '-NonInteractive', '-File', script_path],
                 capture_output=True,
                 text=True,
-                timeout=timeout
+                timeout=timeout,
+                encoding='utf-8',
+                errors='replace'
             )
 
             if result.returncode != 0:
@@ -1135,10 +1139,12 @@ catch {{
 }}
 '''
 
+        # Use UTF-8 encoding to handle extended ASCII characters in regex patterns
         with tempfile.NamedTemporaryFile(
             mode='w',
             suffix='.ps1',
-            delete=False
+            delete=False,
+            encoding='utf-8'
         ) as f:
             f.write(ps_script)
             script_path = f.name
@@ -1150,7 +1156,9 @@ catch {{
                 [ps_executable, '-NoProfile', '-NonInteractive', '-File', script_path],
                 capture_output=True,
                 text=True,
-                timeout=timeout
+                timeout=timeout,
+                encoding='utf-8',
+                errors='replace'
             )
 
             if result.returncode != 0:
