@@ -451,3 +451,165 @@ class ConfigView(views.APIView):
         }
 
         return Response(config)
+
+
+class DiscoverDomainsView(views.APIView):
+    """
+    Auto-discover organization domains from Microsoft 365.
+
+    POST /api/discover-domains/
+
+    Body:
+        {
+            "tenant_id": 1,           // required: which tenant to discover domains for
+            "overwrite": false        // optional: overwrite existing domains (default: false)
+        }
+
+    This endpoint uses the Microsoft Graph API to fetch all verified domains
+    for a tenant and automatically updates the tenant's 'domains' field.
+
+    Required: Domain.Read.All permission in Azure AD (optional permission)
+
+    Admin-only: Only admin users can discover domains.
+    """
+
+    permission_classes = [IsAuthenticated, IsAdminRole]
+
+    def post(self, request):
+        """Trigger domain discovery for a tenant."""
+        tenant_id = request.data.get('tenant_id')
+        overwrite = request.data.get('overwrite', False)
+
+        if not tenant_id:
+            return Response(
+                {'error': 'tenant_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate tenant exists
+        try:
+            tenant = Tenant.objects.get(id=tenant_id)
+        except Tenant.DoesNotExist:
+            return Response(
+                {'error': 'Tenant not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check if domains already configured
+        current_domains = tenant.get_organization_domains()
+        if current_domains and not overwrite:
+            return Response(
+                {
+                    'error': 'Tenant already has domains configured',
+                    'current_domains': current_domains,
+                    'message': 'Set overwrite=true to update existing domains'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        logger.info(
+            f"Domain discovery triggered by {request.user.username} "
+            f"for tenant {tenant.name} (ID: {tenant.id})"
+        )
+
+        # Import here to avoid circular imports
+        from .ms365_client import (
+            get_ms365_client_for_tenant,
+            MS365AuthenticationError,
+            MS365APIError,
+        )
+
+        try:
+            # Get client for this tenant
+            client = get_ms365_client_for_tenant(tenant)
+
+            # Check if client supports domain discovery (Graph API only)
+            if not hasattr(client, 'get_verified_domains'):
+                return Response(
+                    {
+                        'error': 'Domain discovery not supported',
+                        'message': 'Only Microsoft Graph API supports automatic domain discovery. '
+                                   'This tenant is configured to use PowerShell.'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Authenticate
+            client.authenticate()
+
+            # Fetch domains
+            discovered_domains = client.get_verified_domains()
+
+            if not discovered_domains:
+                return Response(
+                    {
+                        'error': 'No verified domains found',
+                        'message': 'No verified domains were found for this tenant'
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Update tenant
+            old_domains = tenant.domains
+            tenant.domains = ','.join(discovered_domains)
+            tenant.domains_last_updated = timezone.now()
+            tenant.save()
+
+            logger.info(
+                f"Domains updated for tenant {tenant.name}: {tenant.domains}"
+            )
+
+            return Response({
+                'message': 'Domains discovered and updated successfully',
+                'tenant_id': tenant.id,
+                'tenant_name': tenant.name,
+                'old_domains': old_domains.split(',') if old_domains else [],
+                'new_domains': discovered_domains,
+                'next_steps': {
+                    'message': 'Run fix_directions to update existing traces',
+                    'command': f'python manage.py fix_directions --fix --tenant-id {tenant.id}'
+                }
+            }, status=status.HTTP_200_OK)
+
+        except MS365AuthenticationError as e:
+            logger.error(f"Authentication failed for domain discovery: {str(e)}")
+            return Response({
+                'error': 'Authentication failed',
+                'detail': str(e),
+                'troubleshooting': [
+                    'Verify tenant credentials (Client ID, Tenant ID)',
+                    'Check certificate/secret configuration',
+                    'Ensure Azure AD app has correct permissions'
+                ]
+            }, status=status.HTTP_401_UNAUTHORIZED)
+
+        except MS365APIError as e:
+            logger.error(f"API error during domain discovery: {str(e)}")
+            error_msg = str(e)
+
+            # Check if it's a permissions error
+            if 'Domain.Read.All' in error_msg or 'Insufficient permissions' in error_msg:
+                return Response({
+                    'error': 'Missing permissions',
+                    'detail': 'Domain.Read.All permission required',
+                    'instructions': [
+                        'Go to Azure Portal > App Registrations',
+                        f'Select your app (Client ID: {tenant.client_id})',
+                        'Go to API Permissions',
+                        'Add "Domain.Read.All" (Application permission)',
+                        'Grant admin consent',
+                    ],
+                    'note': 'This permission is optional. You can manually configure domains if preferred.'
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            return Response({
+                'error': 'API error',
+                'detail': error_msg
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        except Exception as e:
+            logger.exception(f"Unexpected error during domain discovery: {str(e)}")
+            return Response({
+                'error': 'Unexpected error',
+                'detail': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

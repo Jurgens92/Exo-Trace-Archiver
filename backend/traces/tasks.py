@@ -40,6 +40,98 @@ from .ms365_client import (
 logger = logging.getLogger('traces')
 
 
+def auto_refresh_domains_if_needed(tenant, client) -> tuple[bool, str]:
+    """
+    Auto-refresh tenant domains if they're stale or missing.
+
+    Args:
+        tenant: Tenant model instance
+        client: MS365 client instance (must be authenticated)
+
+    Returns:
+        Tuple of (was_refreshed: bool, message: str)
+    """
+    from accounts.models import AppSettings
+
+    # Get settings from database (with fallback defaults)
+    try:
+        app_settings = AppSettings.get_settings()
+        refresh_interval_hours = app_settings.domain_discovery_refresh_hours
+        auto_discover_enabled = app_settings.domain_discovery_auto_refresh
+    except Exception as e:
+        logger.warning(f"Could not load AppSettings, using defaults: {e}")
+        refresh_interval_hours = 24
+        auto_discover_enabled = True
+
+    if not auto_discover_enabled:
+        return False, "Auto-discovery disabled in settings"
+
+    # Check if client supports domain discovery (Graph API only)
+    if not hasattr(client, 'get_verified_domains'):
+        return False, "Client doesn't support domain discovery (PowerShell method)"
+
+    # Check if domains need refreshing
+    needs_refresh = False
+    reason = ""
+
+    if not tenant.domains:
+        # No domains configured at all
+        needs_refresh = True
+        reason = "No domains configured"
+    elif not tenant.domains_last_updated:
+        # Domains exist but no timestamp (legacy data)
+        needs_refresh = True
+        reason = "Domains never refreshed (legacy)"
+    else:
+        # Check if domains are stale
+        now = timezone.now()
+        time_since_update = now - tenant.domains_last_updated
+        refresh_threshold = timedelta(hours=refresh_interval_hours)
+
+        if time_since_update >= refresh_threshold:
+            needs_refresh = True
+            reason = f"Domains stale ({time_since_update.total_seconds() / 3600:.1f} hours old)"
+
+    if not needs_refresh:
+        return False, "Domains are current"
+
+    # Try to refresh domains
+    try:
+        logger.info(
+            f"Auto-refreshing domains for tenant {tenant.name}: {reason}"
+        )
+
+        discovered_domains = client.get_verified_domains()
+
+        if discovered_domains:
+            old_domains = tenant.domains
+            new_domains = ','.join(discovered_domains)
+
+            tenant.domains = new_domains
+            tenant.domains_last_updated = timezone.now()
+            tenant.save(update_fields=['domains', 'domains_last_updated'])
+
+            if old_domains != new_domains:
+                logger.info(
+                    f"Domains updated for tenant {tenant.name}: "
+                    f"Old: {old_domains or '(none)'}, New: {new_domains}"
+                )
+                return True, f"Domains refreshed: {len(discovered_domains)} domains found"
+            else:
+                logger.info(f"Domains unchanged for tenant {tenant.name}")
+                return True, "Domains refreshed (no changes)"
+        else:
+            logger.warning(f"No domains discovered for tenant {tenant.name}")
+            return False, "No domains found during discovery"
+
+    except Exception as e:
+        logger.warning(
+            f"Auto-discovery failed for tenant {tenant.name}: {str(e)}. "
+            f"Continuing with existing domains..."
+        )
+        return False, f"Discovery failed: {str(e)}"
+
+
 def pull_message_traces_for_tenant(
     tenant,
     start_date: datetime | None = None,
@@ -114,6 +206,13 @@ def pull_message_traces_for_tenant(
         # Authenticate
         logger.info(f"Authenticating with Microsoft 365 for tenant: {tenant.name}")
         client.authenticate()
+
+        # Auto-refresh domains if needed (before pulling traces)
+        refreshed, refresh_msg = auto_refresh_domains_if_needed(tenant, client)
+        if refreshed:
+            logger.info(f"Domain auto-refresh: {refresh_msg}")
+            # Reload tenant to get updated domains
+            tenant.refresh_from_db()
 
         # Pull traces (with fallback to PowerShell if Graph API not available)
         logger.info(f"Retrieving message traces for tenant: {tenant.name}")

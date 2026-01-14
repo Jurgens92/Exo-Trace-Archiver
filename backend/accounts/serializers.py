@@ -11,7 +11,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
-from .models import UserProfile, Tenant, TenantPermission
+from .models import UserProfile, Tenant, TenantPermission, AppSettings
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -466,3 +466,46 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             }
             for t in tenants
         ]
+
+
+class AppSettingsSerializer(serializers.ModelSerializer):
+    """Serializer for application-wide settings."""
+
+    updated_by_username = serializers.CharField(
+        source='updated_by.username',
+        read_only=True,
+        default=None
+    )
+
+    class Meta:
+        model = AppSettings
+        fields = [
+            'domain_discovery_auto_refresh',
+            'domain_discovery_refresh_hours',
+            'scheduled_pull_enabled',
+            'scheduled_pull_hour',
+            'scheduled_pull_minute',
+            'updated_at',
+            'updated_by_username',
+        ]
+        read_only_fields = ['updated_at', 'updated_by_username']
+
+    def validate_domain_discovery_refresh_hours(self, value):
+        """Validate refresh hours is within acceptable range."""
+        if value < 1 or value > 168:
+            raise serializers.ValidationError(
+                "Refresh interval must be between 1 and 168 hours (1 week)"
+            )
+        return value
+
+    def validate_scheduled_pull_hour(self, value):
+        """Validate hour is 0-23."""
+        if value < 0 or value > 23:
+            raise serializers.ValidationError("Hour must be between 0 and 23")
+        return value
+
+    def validate_scheduled_pull_minute(self, value):
+        """Validate minute is 0-59."""
+        if value < 0 or value > 59:
+            raise serializers.ValidationError("Minute must be between 0 and 59")
+        return value

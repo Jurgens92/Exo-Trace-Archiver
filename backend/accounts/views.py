@@ -478,3 +478,46 @@ class CertificateUploadView(views.APIView):
             return None
 
         return None
+
+
+class AppSettingsView(views.APIView):
+    """
+    View for getting and updating application-wide settings.
+
+    GET /api/app-settings/
+    PATCH /api/app-settings/
+
+    Admin-only: Only admin users can view or update app settings.
+    """
+
+    permission_classes = [IsAuthenticated, IsAdminRole]
+
+    def get(self, request):
+        """Get current application settings."""
+        from .models import AppSettings
+        from .serializers import AppSettingsSerializer
+
+        settings = AppSettings.get_settings()
+        serializer = AppSettingsSerializer(settings)
+        return Response(serializer.data)
+
+    def patch(self, request):
+        """Update application settings."""
+        from .models import AppSettings
+        from .serializers import AppSettingsSerializer
+
+        settings = AppSettings.get_settings()
+        serializer = AppSettingsSerializer(settings, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+
+        # Update settings
+        for key, value in serializer.validated_data.items():
+            setattr(settings, key, value)
+
+        settings.updated_by = request.user
+        settings.save()
+
+        return Response({
+            'message': 'Settings updated successfully',
+            'settings': AppSettingsSerializer(settings).data
+        })
