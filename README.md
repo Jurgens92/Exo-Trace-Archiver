@@ -7,11 +7,13 @@ A production-ready web application for archiving and searching Microsoft 365 Exc
 - **Message Trace Archiving**: Automatically pull and store Exchange Online message traces
 - **Searchable Interface**: Filter and search traces by sender, recipient, date, status, and direction
 - **Dashboard**: Real-time statistics and activity overview
-- **Scheduled Pulls**: Daily automated retrieval of message traces (configurable)
+- **Scheduled Pulls**: Daily automated retrieval of message traces (configurable via UI)
 - **Manual Pulls**: On-demand trace retrieval via API or web interface
 - **Auto Domain Discovery**: Automatically detect organization domains from Microsoft 365 (optional)
+- **Auto Domain Refresh**: Keeps domains up-to-date automatically with configurable intervals
 - **Direction Classification**: Smart classification of emails as Inbound, Outbound, or Internal
 - **Multi-Tenant Support**: Manage multiple Microsoft 365 tenants in one application
+- **Configurable Settings**: Adjust pull schedules and domain refresh intervals from the UI
 - **Secure Authentication**: Token-based API authentication with admin-only access
 - **Modern UI**: Responsive React frontend with Tailwind CSS
 

@@ -18,6 +18,7 @@ from .views import (
     CurrentUserView,
     AccessibleTenantsView,
     CertificateUploadView,
+    AppSettingsView,
 )
 
 # Create router for ViewSets
@@ -36,4 +37,7 @@ urlpatterns = [
 
     # Certificate upload
     path('certificates/upload/', CertificateUploadView.as_view(), name='certificate-upload'),
+
+    # App settings
+    path('settings/', AppSettingsView.as_view(), name='app-settings'),
 ]

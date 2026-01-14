@@ -552,6 +552,7 @@ class DiscoverDomainsView(views.APIView):
             # Update tenant
             old_domains = tenant.domains
             tenant.domains = ','.join(discovered_domains)
+            tenant.domains_last_updated = timezone.now()
             tenant.save()
 
             logger.info(

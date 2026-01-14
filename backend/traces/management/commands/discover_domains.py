@@ -139,8 +139,10 @@ class Command(BaseCommand):
 
                 # Update tenant (if not dry run)
                 if not dry_run:
+                    from django.utils import timezone
                     old_domains = tenant.domains
                     tenant.domains = ','.join(discovered_domains)
+                    tenant.domains_last_updated = timezone.now()
                     tenant.save()
 
                     self.stdout.write()
