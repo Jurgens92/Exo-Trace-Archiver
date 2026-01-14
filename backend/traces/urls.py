@@ -19,4 +19,5 @@ urlpatterns = [
     path('manual-pull/', views.ManualPullView.as_view(), name='manual-pull'),
     path('dashboard/', views.DashboardView.as_view(), name='dashboard'),
     path('config/', views.ConfigView.as_view(), name='config'),
+    path('discover-domains/', views.DiscoverDomainsView.as_view(), name='discover-domains'),
 ]

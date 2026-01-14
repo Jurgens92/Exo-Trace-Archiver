@@ -9,6 +9,9 @@ A production-ready web application for archiving and searching Microsoft 365 Exc
 - **Dashboard**: Real-time statistics and activity overview
 - **Scheduled Pulls**: Daily automated retrieval of message traces (configurable)
 - **Manual Pulls**: On-demand trace retrieval via API or web interface
+- **Auto Domain Discovery**: Automatically detect organization domains from Microsoft 365 (optional)
+- **Direction Classification**: Smart classification of emails as Inbound, Outbound, or Internal
+- **Multi-Tenant Support**: Manage multiple Microsoft 365 tenants in one application
 - **Secure Authentication**: Token-based API authentication with admin-only access
 - **Modern UI**: Responsive React frontend with Tailwind CSS
 
@@ -59,12 +62,15 @@ exo-trace-archiver/
 Navigate to **API permissions** and add the following:
 
 **For Microsoft Graph API (Recommended):**
-- `Reports.Read.All` (Application permission)
+- `Reports.Read.All` (Application permission) - **Required** for message traces
+- `Domain.Read.All` (Application permission) - **Optional** for automatic domain discovery
 
 **For Exchange Online PowerShell (Fallback):**
 - `Exchange.ManageAsApp` (Application permission)
 
 After adding permissions, click **Grant admin consent**.
+
+**Note:** `Domain.Read.All` is optional and only needed if you want to use the automatic domain discovery feature. See [DOMAIN_DISCOVERY.md](DOMAIN_DISCOVERY.md) for details.
 
 ### Step 3: Authentication Setup
 

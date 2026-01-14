@@ -443,6 +443,79 @@ class GraphAPIClient(BaseMS365Client):
         logger.info(f"Retrieved {len(all_traces)} total message traces via Graph API")
         return all_traces
 
+    def get_verified_domains(self) -> list[str]:
+        """
+        Retrieve verified domains for the tenant from Microsoft Graph API.
+
+        Uses the /domains endpoint to get all verified domains for the tenant.
+        This is useful for auto-configuring the tenant's organization domains
+        for direction classification.
+
+        Required Permission: Domain.Read.All (Application)
+
+        Returns:
+            List of verified domain names (e.g., ['contoso.com', 'contoso.onmicrosoft.com'])
+
+        Raises:
+            MS365APIError: If the API call fails
+        """
+        try:
+            import requests
+        except ImportError:
+            raise MS365APIError(
+                "requests library not installed. "
+                "Install it with: pip install requests"
+            )
+
+        self._ensure_authenticated()
+
+        headers = {
+            "Authorization": f"Bearer {self._access_token}",
+            "Content-Type": "application/json",
+        }
+
+        url = f"{self.GRAPH_URL}/domains"
+
+        try:
+            response = requests.get(url, headers=headers)
+
+            if response.status_code == 401:
+                # Token expired, re-authenticate and retry
+                self._access_token = None
+                self._ensure_authenticated()
+                headers["Authorization"] = f"Bearer {self._access_token}"
+                response = requests.get(url, headers=headers)
+
+            if response.status_code == 403:
+                raise MS365APIError(
+                    "Insufficient permissions to read domains. "
+                    "Please add 'Domain.Read.All' application permission in Azure AD "
+                    "and grant admin consent. This permission is optional and only "
+                    "needed for automatic domain discovery."
+                )
+
+            if response.status_code != 200:
+                error_text = response.text
+                raise MS365APIError(
+                    f"Graph API error fetching domains: {response.status_code} - {error_text}"
+                )
+
+            data = response.json()
+            domains_data = data.get("value", [])
+
+            # Extract domain names from verified domains only
+            verified_domains = [
+                domain['id']
+                for domain in domains_data
+                if domain.get('isVerified', False)
+            ]
+
+            logger.info(f"Retrieved {len(verified_domains)} verified domains from Graph API")
+            return verified_domains
+
+        except requests.RequestException as e:
+            raise MS365APIError(f"Network error calling Graph API for domains: {str(e)}")
+
 
 class PowerShellClient(BaseMS365Client):
     """
