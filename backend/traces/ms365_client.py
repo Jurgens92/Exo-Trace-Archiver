@@ -27,6 +27,7 @@ Important Notes:
 
 import json
 import logging
+import re
 import subprocess
 import tempfile
 from abc import ABC, abstractmethod
@@ -62,6 +63,33 @@ class MS365GraphAPINotAvailableError(MS365APIError):
     The caller should fall back to PowerShell when this error is raised.
     """
     pass
+
+
+def sanitize_powershell_output(output: str) -> str:
+    """
+    Sanitize PowerShell output to remove control characters that break JSON parsing.
+
+    This handles:
+    - ASCII control characters (0x00-0x1F except tab, newline, carriage return)
+    - DEL character (0x7F)
+    - Extended ASCII control characters (0x80-0x9F, C1 control codes)
+    - Unicode control characters in various ranges
+
+    Args:
+        output: Raw PowerShell output string
+
+    Returns:
+        Sanitized string safe for JSON parsing
+    """
+    # Pattern matches:
+    # - \x00-\x08: NUL through BS (before TAB)
+    # - \x0B-\x0C: VT, FF (between LF and CR)
+    # - \x0E-\x1F: SO through US (after CR)
+    # - \x7F: DEL
+    # - \x80-\x9F: C1 control codes (extended ASCII)
+    # We preserve \x09 (TAB), \x0A (LF), \x0D (CR) as they're valid in JSON strings
+    control_char_pattern = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\x80-\x9F]')
+    return control_char_pattern.sub('', output)
 
 
 class BaseMS365Client(ABC):
@@ -592,14 +620,16 @@ try {{
     }}
 
     # Sanitize string fields to remove control characters that break JSON parsing
+    # Pattern matches ASCII control chars (0x00-0x1F), DEL (0x7F), and C1 control codes (0x80-0x9F)
+    $controlCharPattern = '[\x00-\x1F\x7F\x80-\x9F]'
     $cleanTraces = @()
     foreach ($trace in $allTraces) {{
         $cleanTrace = [PSCustomObject]@{{
-            MessageId = if ($trace.MessageId) {{ [regex]::Replace($trace.MessageId, '[\x00-\x1F\x7F]', '') }} else {{ '' }}
+            MessageId = if ($trace.MessageId) {{ [regex]::Replace($trace.MessageId.ToString(), $controlCharPattern, '') }} else {{ '' }}
             Received = $trace.Received
-            SenderAddress = if ($trace.SenderAddress) {{ [regex]::Replace($trace.SenderAddress, '[\x00-\x1F\x7F]', '') }} else {{ '' }}
-            RecipientAddress = if ($trace.RecipientAddress) {{ [regex]::Replace($trace.RecipientAddress, '[\x00-\x1F\x7F]', '') }} else {{ '' }}
-            Subject = if ($trace.Subject) {{ [regex]::Replace($trace.Subject, '[\x00-\x1F\x7F]', '') }} else {{ '' }}
+            SenderAddress = if ($trace.SenderAddress) {{ [regex]::Replace($trace.SenderAddress.ToString(), $controlCharPattern, '') }} else {{ '' }}
+            RecipientAddress = if ($trace.RecipientAddress) {{ [regex]::Replace($trace.RecipientAddress.ToString(), $controlCharPattern, '') }} else {{ '' }}
+            Subject = if ($trace.Subject) {{ [regex]::Replace($trace.Subject.ToString(), $controlCharPattern, '') }} else {{ '' }}
             Status = if ($trace.Status) {{ $trace.Status.ToString() }} else {{ '' }}
             ToIP = if ($trace.ToIP) {{ $trace.ToIP.ToString() }} else {{ '' }}
             FromIP = if ($trace.FromIP) {{ $trace.FromIP.ToString() }} else {{ '' }}
@@ -651,6 +681,9 @@ catch {{
             if not output:
                 logger.info("No message traces found for the specified date range")
                 return []
+
+            # Sanitize output to remove control characters that break JSON parsing
+            output = sanitize_powershell_output(output)
 
             try:
                 traces = json.loads(output)
@@ -1070,14 +1103,16 @@ try {{
     }}
 
     # Sanitize string fields to remove control characters that break JSON parsing
+    # Pattern matches ASCII control chars (0x00-0x1F), DEL (0x7F), and C1 control codes (0x80-0x9F)
+    $controlCharPattern = '[\x00-\x1F\x7F\x80-\x9F]'
     $cleanTraces = @()
     foreach ($trace in $allTraces) {{
         $cleanTrace = [PSCustomObject]@{{
-            MessageId = if ($trace.MessageId) {{ [regex]::Replace($trace.MessageId, '[\x00-\x1F\x7F]', '') }} else {{ '' }}
+            MessageId = if ($trace.MessageId) {{ [regex]::Replace($trace.MessageId.ToString(), $controlCharPattern, '') }} else {{ '' }}
             Received = $trace.Received
-            SenderAddress = if ($trace.SenderAddress) {{ [regex]::Replace($trace.SenderAddress, '[\x00-\x1F\x7F]', '') }} else {{ '' }}
-            RecipientAddress = if ($trace.RecipientAddress) {{ [regex]::Replace($trace.RecipientAddress, '[\x00-\x1F\x7F]', '') }} else {{ '' }}
-            Subject = if ($trace.Subject) {{ [regex]::Replace($trace.Subject, '[\x00-\x1F\x7F]', '') }} else {{ '' }}
+            SenderAddress = if ($trace.SenderAddress) {{ [regex]::Replace($trace.SenderAddress.ToString(), $controlCharPattern, '') }} else {{ '' }}
+            RecipientAddress = if ($trace.RecipientAddress) {{ [regex]::Replace($trace.RecipientAddress.ToString(), $controlCharPattern, '') }} else {{ '' }}
+            Subject = if ($trace.Subject) {{ [regex]::Replace($trace.Subject.ToString(), $controlCharPattern, '') }} else {{ '' }}
             Status = if ($trace.Status) {{ $trace.Status.ToString() }} else {{ '' }}
             ToIP = if ($trace.ToIP) {{ $trace.ToIP.ToString() }} else {{ '' }}
             FromIP = if ($trace.FromIP) {{ $trace.FromIP.ToString() }} else {{ '' }}
@@ -1126,6 +1161,9 @@ catch {{
             if not output:
                 logger.info(f"No message traces found for tenant: {self.tenant.name}")
                 return []
+
+            # Sanitize output to remove control characters that break JSON parsing
+            output = sanitize_powershell_output(output)
 
             try:
                 traces = json.loads(output)
