@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Search, Filter, X, Building2 } from 'lucide-react'
+import { Search, Filter, X, Building2, FileDown, Loader2 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,6 +28,7 @@ import { Pagination } from '@/components/Pagination'
 import { StatusBadge, DirectionBadge } from '@/components/StatusBadge'
 import { formatDateShort } from '@/lib/utils'
 import type { TraceFilterParams, TraceStatus, TraceDirection } from '@/api/types'
+import { exportSearchResultsPdf, downloadBlob } from '@/api/traces'
 
 const PAGE_SIZE = 50
 
@@ -63,6 +64,7 @@ export function TracesPage() {
               searchParams.get('start_date') || searchParams.get('end_date'))
   })
   const [searchInput, setSearchInput] = useState(searchParams.get('search') || '')
+  const [isExporting, setIsExporting] = useState(false)
 
   // Combine user filters with tenant filter
   const effectiveFilters = useMemo(() => {
@@ -113,6 +115,19 @@ export function TracesPage() {
     setSearchParams({}, { replace: true })  // Clear URL params
   }
 
+  const handleExportPdf = async () => {
+    setIsExporting(true)
+    try {
+      const blob = await exportSearchResultsPdf(effectiveFilters)
+      const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      downloadBlob(blob, `trace_search_results_${dateStr}.pdf`)
+    } catch (error) {
+      console.error('Failed to export PDF:', error)
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   const totalPages = data ? Math.ceil(data.count / PAGE_SIZE) : 0
 
   if (isLoading && !data) return <LoadingPage />
@@ -131,13 +146,27 @@ export function TracesPage() {
             </div>
           )}
         </div>
-        <Button
-          variant="outline"
-          onClick={() => setShowFilters(!showFilters)}
-        >
-          <Filter className="h-4 w-4 mr-2" />
-          Filters
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleExportPdf}
+            disabled={isExporting || !data || data.results.length === 0}
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <FileDown className="h-4 w-4 mr-2" />
+            )}
+            Export PDF
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            <Filter className="h-4 w-4 mr-2" />
+            Filters
+          </Button>
+        </div>
       </div>
 
       {/* Search Bar */}

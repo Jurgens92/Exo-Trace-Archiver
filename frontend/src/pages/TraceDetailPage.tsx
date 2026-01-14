@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Copy, Check } from 'lucide-react'
+import { ArrowLeft, Copy, Check, FileDown, Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,17 +8,35 @@ import { useTrace } from '@/hooks/useTraces'
 import { LoadingPage } from '@/components/LoadingSpinner'
 import { StatusBadge, DirectionBadge } from '@/components/StatusBadge'
 import { formatDate } from '@/lib/utils'
+import { exportTracePdf, downloadBlob } from '@/api/traces'
 
 export function TraceDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: trace, isLoading, error } = useTrace(Number(id))
   const [copied, setCopied] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
 
   const copyMessageId = () => {
     if (trace?.message_id) {
       navigator.clipboard.writeText(trace.message_id)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  const handleExportPdf = async () => {
+    if (!id) return
+    setIsExporting(true)
+    try {
+      const blob = await exportTracePdf(Number(id))
+      const dateStr = trace?.received_date
+        ? new Date(trace.received_date).toISOString().split('T')[0].replace(/-/g, '')
+        : 'unknown'
+      downloadBlob(blob, `trace_detail_${id}_${dateStr}.pdf`)
+    } catch (error) {
+      console.error('Failed to export PDF:', error)
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -42,14 +60,24 @@ export function TraceDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link to="/traces">
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-        </Link>
-        <h1 className="text-2xl font-bold">Message Trace Detail</h1>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link to="/traces">
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+          </Link>
+          <h1 className="text-2xl font-bold">Message Trace Detail</h1>
+        </div>
+        <Button onClick={handleExportPdf} disabled={isExporting}>
+          {isExporting ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <FileDown className="h-4 w-4 mr-2" />
+          )}
+          Export PDF
+        </Button>
       </div>
 
       {/* Overview Card */}
