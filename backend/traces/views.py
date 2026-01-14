@@ -17,12 +17,15 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db.models import Count, Q
+from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import viewsets, status, views
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.throttling import UserRateThrottle
+
+from .pdf_generator import pdf_generator
 
 from .models import MessageTraceLog, PullHistory
 from .serializers import (
@@ -128,19 +131,108 @@ class MessageTraceLogViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['get'])
-    def export(self, request):
+    @action(detail=True, methods=['get'], url_path='export-pdf')
+    def export_pdf(self, request, pk=None):
         """
-        Export filtered traces as CSV.
+        Export a single message trace as PDF.
 
-        Future enhancement: Add more export formats (JSON, Excel).
+        GET /api/traces/{id}/export-pdf/
+
+        Returns a downloadable PDF file with detailed trace information.
         """
-        # TODO: Implement CSV export
-        # This is a placeholder for future implementation
-        return Response(
-            {'message': 'Export feature coming soon'},
-            status=status.HTTP_501_NOT_IMPLEMENTED
-        )
+        try:
+            trace = self.get_object()
+        except Exception:
+            return Response(
+                {'error': 'Trace not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Get tenant name for multi-tenant context
+        tenant_name = trace.tenant.name if trace.tenant else None
+
+        # Generate PDF
+        try:
+            pdf_bytes = pdf_generator.generate_trace_detail_pdf(trace, tenant_name)
+        except Exception as e:
+            logger.error(f"PDF generation failed: {str(e)}", exc_info=True)
+            return Response(
+                {'error': 'Failed to generate PDF', 'detail': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        # Create filename
+        date_str = trace.received_date.strftime('%Y%m%d') if trace.received_date else 'unknown'
+        filename = f"trace_detail_{trace.id}_{date_str}.pdf"
+
+        # Return PDF response
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    @action(detail=False, methods=['get'], url_path='export-search-pdf')
+    def export_search_pdf(self, request):
+        """
+        Export search results as PDF.
+
+        GET /api/traces/export-search-pdf/?search=...&status=...&direction=...
+
+        Accepts all the same filter parameters as the list endpoint.
+        Returns a downloadable PDF file with the filtered trace results.
+
+        Note: Limited to first 500 results to keep PDF size reasonable.
+        """
+        # Get filtered queryset (same as list view)
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Limit to 500 results for PDF
+        max_results = 500
+        total_count = queryset.count()
+        traces = list(queryset[:max_results])
+
+        # Build filters dict from request params for display in PDF
+        filters = {}
+        filter_keys = ['search', 'status', 'direction', 'start_date', 'end_date',
+                       'sender', 'recipient', 'sender_domain', 'recipient_domain']
+        for key in filter_keys:
+            value = request.query_params.get(key)
+            if value:
+                filters[key] = value
+
+        # Get tenant name if filtering by specific tenant
+        tenant_name = None
+        tenant_id = request.query_params.get('tenant')
+        if tenant_id:
+            try:
+                from accounts.models import Tenant
+                tenant = Tenant.objects.get(id=int(tenant_id))
+                tenant_name = tenant.name
+            except (ValueError, Tenant.DoesNotExist):
+                pass
+
+        # Generate PDF
+        try:
+            pdf_bytes = pdf_generator.generate_search_results_pdf(
+                traces=traces,
+                filters=filters,
+                tenant_name=tenant_name,
+                total_count=total_count
+            )
+        except Exception as e:
+            logger.error(f"PDF generation failed: {str(e)}", exc_info=True)
+            return Response(
+                {'error': 'Failed to generate PDF', 'detail': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        # Create filename
+        date_str = timezone.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"trace_search_results_{date_str}.pdf"
+
+        # Return PDF response
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
 
 
 class PullHistoryViewSet(viewsets.ReadOnlyModelViewSet):
