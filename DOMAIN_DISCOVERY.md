@@ -90,12 +90,12 @@ Content-Type: application/json
 {
   "message": "Domains discovered and updated successfully",
   "tenant_id": 1,
-  "tenant_name": "IT Window",
+  "tenant_name": "Contoso",
   "old_domains": [],
   "new_domains": [
-    "itwindow.co.za",
-    "itwindowcc.onmicrosoft.com",
-    "itwindowcc.com"
+    "contoso.com",
+    "contoso.onmicrosoft.com",
+    "contoso.mail.onmicrosoft.com"
   ],
   "next_steps": {
     "message": "Run fix_directions to update existing traces",
@@ -171,7 +171,7 @@ $ python manage.py discover_domains --tenant-id 3
 🔍 Domain Discovery Tool
 
 ================================================================================
-Tenant: IT Window (ID: 3)
+Tenant: Contoso (ID: 3)
 ================================================================================
 Current domains: (none configured)
 
@@ -180,13 +180,13 @@ Current domains: (none configured)
 🌐 Fetching verified domains...
 
 ✅ Discovered 3 verified domains:
-   • itwindow.co.za
-   • itwindowcc.onmicrosoft.com
-   • itwindowcc.com
+   • contoso.com
+   • contoso.onmicrosoft.com
+   • contoso.mail.onmicrosoft.com
 
 ✅ Tenant updated successfully!
 
-Updated:  itwindow.co.za,itwindowcc.onmicrosoft.com,itwindowcc.com
+Updated:  contoso.com,contoso.onmicrosoft.com,contoso.mail.onmicrosoft.com
 
 📋 Next Steps:
    Run this command to fix directions for existing traces:

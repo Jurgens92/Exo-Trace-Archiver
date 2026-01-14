@@ -139,7 +139,7 @@ Each tenant now has:
 Example:
 ```python
 tenant = Tenant.objects.get(id=3)
-print(tenant.domains)  # "itwindow.co.za,itwindowcc.onmicrosoft.com"
+print(tenant.domains)  # "contoso.com,contoso.onmicrosoft.com"
 print(tenant.domains_last_updated)  # 2026-01-14 15:30:00+00:00
 ```
 
@@ -148,14 +148,14 @@ print(tenant.domains_last_updated)  # 2026-01-14 15:30:00+00:00
 Auto-refresh events are logged for monitoring:
 
 ```
-INFO: Auto-refreshing domains for tenant IT Window: No domains configured
-INFO: Domains updated for tenant IT Window: Old: (none), New: itwindow.co.za,itwindowcc.onmicrosoft.com
+INFO: Auto-refreshing domains for tenant Contoso: No domains configured
+INFO: Domains updated for tenant Contoso: Old: (none), New: contoso.com,contoso.onmicrosoft.com
 INFO: Domain auto-refresh: Domains refreshed: 2 domains found
 ```
 
 If refresh fails:
 ```
-WARNING: Auto-discovery failed for tenant IT Window: Insufficient permissions. Continuing with existing domains...
+WARNING: Auto-discovery failed for tenant Contoso: Insufficient permissions. Continuing with existing domains...
 ```
 
 ## Fallback Behavior
