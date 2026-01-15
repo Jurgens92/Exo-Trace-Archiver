@@ -878,18 +878,21 @@ catch {{
             result = subprocess.run(
                 [ps_executable, '-NoProfile', '-NonInteractive', '-File', script_path],
                 capture_output=True,
-                text=True,
-                timeout=timeout,
-                encoding='utf-8',
-                errors='replace'
+                timeout=timeout
             )
 
             if result.returncode != 0:
-                error_msg = result.stderr or result.stdout or "Unknown PowerShell error"
+                # Decode stderr/stdout for error messages, ignoring encoding errors
+                error_msg = (
+                    result.stderr.decode('utf-8', errors='ignore') or
+                    result.stdout.decode('utf-8', errors='ignore') or
+                    "Unknown PowerShell error"
+                )
                 raise MS365APIError(f"PowerShell error: {error_msg}")
 
-            # Parse JSON output
-            output = result.stdout.strip()
+            # Decode output using 'ignore' to remove invalid bytes instead of replacing them
+            # Using 'replace' corrupts JSON by inserting replacement characters mid-token
+            output = result.stdout.decode('utf-8', errors='ignore').strip()
             if not output:
                 logger.info("No message traces found for the specified date range")
                 return []
@@ -1363,17 +1366,21 @@ catch {{
             result = subprocess.run(
                 [ps_executable, '-NoProfile', '-NonInteractive', '-File', script_path],
                 capture_output=True,
-                text=True,
-                timeout=timeout,
-                encoding='utf-8',
-                errors='replace'
+                timeout=timeout
             )
 
             if result.returncode != 0:
-                error_msg = result.stderr or result.stdout or "Unknown PowerShell error"
+                # Decode stderr/stdout for error messages, ignoring encoding errors
+                error_msg = (
+                    result.stderr.decode('utf-8', errors='ignore') or
+                    result.stdout.decode('utf-8', errors='ignore') or
+                    "Unknown PowerShell error"
+                )
                 raise MS365APIError(f"PowerShell error: {error_msg}")
 
-            output = result.stdout.strip()
+            # Decode output using 'ignore' to remove invalid bytes instead of replacing them
+            # Using 'replace' corrupts JSON by inserting replacement characters mid-token
+            output = result.stdout.decode('utf-8', errors='ignore').strip()
             if not output:
                 logger.info(f"No message traces found for tenant: {self.tenant.name}")
                 return []
