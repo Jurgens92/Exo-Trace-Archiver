@@ -44,8 +44,13 @@ logger = logging.getLogger('traces')
 
 
 class ManualPullRateThrottle(UserRateThrottle):
-    """Custom throttle for manual pull endpoint to prevent abuse."""
-    rate = '10/hour'
+    """
+    Custom throttle for manual pull endpoint to prevent abuse.
+
+    Uses its own scope 'manual_pull' to avoid conflicts with other throttles.
+    Rate is configured in settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['manual_pull'].
+    """
+    scope = 'manual_pull'
 
 
 class MessageTraceLogViewSet(viewsets.ReadOnlyModelViewSet):
