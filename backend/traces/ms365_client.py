@@ -779,6 +779,9 @@ Connect-ExchangeOnline `
         ps_script = f'''
 $ErrorActionPreference = "Stop"
 
+# Set UTF-8 encoding for stdout to handle large JSON output without truncation
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 try {{
     # Import module
     Import-Module ExchangeOnlineManagement -ErrorAction Stop
@@ -847,9 +850,10 @@ try {{
         $cleanTraces += $cleanTrace
     }}
 
-    # Output as JSON
+    # Output as JSON - use Console.WriteLine to avoid PowerShell output buffer truncation
     if ($cleanTraces.Count -gt 0) {{
-        $cleanTraces | ConvertTo-Json -Depth 10 -Compress
+        $jsonOutput = $cleanTraces | ConvertTo-Json -Depth 10 -Compress
+        [Console]::WriteLine($jsonOutput)
     }}
 
     # Disconnect
@@ -1272,6 +1276,9 @@ Connect-ExchangeOnline `
         ps_script = f'''
 $ErrorActionPreference = "Stop"
 
+# Set UTF-8 encoding for stdout to handle large JSON output without truncation
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 try {{
     Import-Module ExchangeOnlineManagement -ErrorAction Stop
     {connect_cmd}
@@ -1337,9 +1344,10 @@ try {{
         $cleanTraces += $cleanTrace
     }}
 
-    # Output as JSON
+    # Output as JSON - use Console.WriteLine to avoid PowerShell output buffer truncation
     if ($cleanTraces.Count -gt 0) {{
-        $cleanTraces | ConvertTo-Json -Depth 10 -Compress
+        $jsonOutput = $cleanTraces | ConvertTo-Json -Depth 10 -Compress
+        [Console]::WriteLine($jsonOutput)
     }}
 
     Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
