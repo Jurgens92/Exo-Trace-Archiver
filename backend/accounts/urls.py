@@ -15,6 +15,7 @@ from .views import (
     UserViewSet,
     TenantViewSet,
     TenantPermissionViewSet,
+    TenantAuditLogViewSet,
     CurrentUserView,
     AccessibleTenantsView,
     CertificateUploadView,
@@ -26,6 +27,7 @@ router = DefaultRouter()
 router.register(r'users', UserViewSet, basename='user')
 router.register(r'tenants', TenantViewSet, basename='tenant')
 router.register(r'permissions', TenantPermissionViewSet, basename='permission')
+router.register(r'audit-logs', TenantAuditLogViewSet, basename='audit-log')
 
 urlpatterns = [
     # ViewSet routes

@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 
-from .models import UserProfile, Tenant, TenantPermission
+from .models import UserProfile, Tenant, TenantPermission, TenantAuditLog
 
 
 class UserProfileInline(admin.StackedInline):
@@ -36,6 +36,17 @@ class TenantPermissionAdmin(admin.ModelAdmin):
     list_filter = ('tenant', 'granted_at')
     search_fields = ('user__username', 'tenant__name')
     raw_id_fields = ('user', 'tenant', 'granted_by')
+
+
+@admin.register(TenantAuditLog)
+class TenantAuditLogAdmin(admin.ModelAdmin):
+    list_display = ('created_at', 'tenant_name', 'action', 'status', 'performed_by', 'detail')
+    list_filter = ('action', 'status', 'created_at')
+    search_fields = ('tenant_name', 'detail', 'error_message')
+    readonly_fields = ('tenant', 'tenant_name', 'action', 'status', 'detail',
+                       'error_message', 'error_traceback', 'metadata',
+                       'performed_by', 'created_at')
+    ordering = ('-created_at',)
 
 
 # Re-register User admin

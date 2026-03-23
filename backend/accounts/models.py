@@ -277,6 +277,86 @@ def save_user_profile(sender, instance, **kwargs):
         instance.profile.save()
 
 
+class TenantAuditLog(models.Model):
+    """
+    Audit log for tenant-related operations.
+
+    Tracks tenant creation, updates, deletion, connection tests,
+    and certificate uploads with detailed error information.
+    """
+
+    class Action(models.TextChoices):
+        CREATE = 'create', 'Tenant Created'
+        UPDATE = 'update', 'Tenant Updated'
+        DELETE = 'delete', 'Tenant Deleted'
+        TEST_CONNECTION = 'test_connection', 'Connection Test'
+        CERTIFICATE_UPLOAD = 'certificate_upload', 'Certificate Upload'
+
+    class Status(models.TextChoices):
+        SUCCESS = 'success', 'Success'
+        FAILURE = 'failure', 'Failure'
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='audit_logs',
+        help_text="The tenant this action was performed on"
+    )
+    tenant_name = models.CharField(
+        max_length=255,
+        help_text="Tenant name at the time of the action (preserved after deletion)"
+    )
+    action = models.CharField(
+        max_length=30,
+        choices=Action.choices,
+        help_text="The type of action performed"
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=Status.choices,
+        help_text="Whether the action succeeded or failed"
+    )
+    detail = models.TextField(
+        blank=True,
+        default='',
+        help_text="Human-readable summary of what happened"
+    )
+    error_message = models.TextField(
+        blank=True,
+        default='',
+        help_text="Full error message if the action failed"
+    )
+    error_traceback = models.TextField(
+        blank=True,
+        default='',
+        help_text="Python traceback for debugging failed operations"
+    )
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional structured data about the action (e.g., changed fields)"
+    )
+    performed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='tenant_audit_logs',
+        help_text="User who performed this action"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Tenant Audit Log'
+        verbose_name_plural = 'Tenant Audit Logs'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.created_at}] {self.action} - {self.tenant_name} - {self.status}"
+
+
 class AppSettings(models.Model):
     """
     Application-wide settings that can be configured via the UI.
