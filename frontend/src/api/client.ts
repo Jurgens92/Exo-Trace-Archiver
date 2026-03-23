@@ -53,9 +53,12 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      // Clear token and redirect to login on 401
-      clearAuthToken()
-      window.location.href = '/login'
+      // Don't redirect on login endpoint failures — let the login form handle the error
+      const url = error.config?.url || ''
+      if (!url.includes('/auth/token')) {
+        clearAuthToken()
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   }

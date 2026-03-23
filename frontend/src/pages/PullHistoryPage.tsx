@@ -20,7 +20,7 @@ const PAGE_SIZE = 25
 
 export function PullHistoryPage() {
   const [page, setPage] = useState(1)
-  const { data, isLoading, error, refetch } = usePullHistory({ page })
+  const { data, isLoading, error, refetch } = usePullHistory({ page, page_size: PAGE_SIZE })
 
   const totalPages = data ? Math.ceil(data.count / PAGE_SIZE) : 0
 

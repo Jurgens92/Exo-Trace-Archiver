@@ -15,6 +15,7 @@ import type {
  */
 export async function fetchPullHistory(params: {
   page?: number
+  page_size?: number
   status?: string
   trigger_type?: string
 } = {}): Promise<PaginatedResponse<PullHistory>> {

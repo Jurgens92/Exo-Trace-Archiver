@@ -7,6 +7,7 @@ import { fetchPullHistory, triggerManualPull, ManualPullRequest } from '@/api'
 
 export function usePullHistory(params: {
   page?: number
+  page_size?: number
   status?: string
   trigger_type?: string
 } = {}) {
