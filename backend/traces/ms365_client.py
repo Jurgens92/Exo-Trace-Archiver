@@ -682,6 +682,7 @@ class PowerShellClient(BaseMS365Client):
 
     def _get_powershell_executable(self) -> str:
         """Determine the PowerShell executable to use."""
+        import platform
         import shutil
 
         # Prefer PowerShell 7 (pwsh) over Windows PowerShell
@@ -693,6 +694,15 @@ class PowerShellClient(BaseMS365Client):
         if powershell:
             return powershell
 
+        system = platform.system().lower()
+        if system == 'linux':
+            raise MS365APIError(
+                "PowerShell is not installed on this Linux system. "
+                "Consider switching your tenant's API method to 'graph' (Microsoft Graph API), "
+                "which is the recommended method and does not require PowerShell. "
+                "Alternatively, install PowerShell 7 on Ubuntu: "
+                "sudo apt-get update && sudo apt-get install -y powershell"
+            )
         raise MS365APIError(
             "PowerShell not found. Install PowerShell 7: "
             "https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell"
@@ -963,6 +973,15 @@ def get_ms365_client_for_tenant(tenant) -> 'TenantGraphAPIClient | TenantPowerSh
         logger.info(f"Using Microsoft Graph API client for tenant: {tenant.name}")
         return TenantGraphAPIClient(tenant)
     else:
+        # Early check for PowerShell availability to provide a clear error
+        import shutil
+        if not shutil.which('pwsh') and not shutil.which('powershell'):
+            raise MS365APIError(
+                f"Tenant '{tenant.name}' is configured to use PowerShell, but PowerShell "
+                f"is not installed on this system. Update the tenant's API method to 'graph' "
+                f"(Microsoft Graph API) in the admin panel, which is the recommended method "
+                f"and does not require PowerShell."
+            )
         logger.info(f"Using Exchange Online PowerShell client for tenant: {tenant.name}")
         return TenantPowerShellClient(tenant)
 
