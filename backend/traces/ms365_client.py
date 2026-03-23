@@ -973,15 +973,14 @@ def get_ms365_client_for_tenant(tenant) -> 'TenantGraphAPIClient | TenantPowerSh
         logger.info(f"Using Microsoft Graph API client for tenant: {tenant.name}")
         return TenantGraphAPIClient(tenant)
     else:
-        # Early check for PowerShell availability to provide a clear error
+        # Check for PowerShell availability; fall back to Graph API if not installed
         import shutil
         if not shutil.which('pwsh') and not shutil.which('powershell'):
-            raise MS365APIError(
+            logger.warning(
                 f"Tenant '{tenant.name}' is configured to use PowerShell, but PowerShell "
-                f"is not installed on this system. Update the tenant's API method to 'graph' "
-                f"(Microsoft Graph API) in the admin panel, which is the recommended method "
-                f"and does not require PowerShell."
+                f"is not installed on this system. Falling back to Microsoft Graph API."
             )
+            return TenantGraphAPIClient(tenant)
         logger.info(f"Using Exchange Online PowerShell client for tenant: {tenant.name}")
         return TenantPowerShellClient(tenant)
 
