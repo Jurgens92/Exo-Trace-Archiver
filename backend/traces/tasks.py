@@ -236,6 +236,19 @@ def pull_message_traces_for_tenant(
                     f"or add Office 365 Exchange Online API permissions in Azure AD. "
                     f"Original error: {str(e)}"
                 )
+            # Check if PowerShell is installed before attempting fallback
+            import shutil
+            if not shutil.which('pwsh') and not shutil.which('powershell'):
+                raise MS365APIError(
+                    f"Graph API message trace endpoint not available for tenant '{tenant.name}' "
+                    f"and PowerShell is not installed on this system, so the PowerShell fallback "
+                    f"cannot be used. To fix this on Ubuntu, either:\n"
+                    f"  1. Install PowerShell: sudo apt-get update && sudo apt-get install -y powershell\n"
+                    f"     Then install the module: pwsh -Command 'Install-Module ExchangeOnlineManagement -Force'\n"
+                    f"  2. Or add Office 365 Exchange Online API permissions to your Azure AD app "
+                    f"so the Graph API endpoint works directly.\n"
+                    f"Original error: {str(e)}"
+                )
             # Create PowerShell client and retry
             client = TenantPowerShellClient(tenant)
             client.authenticate()

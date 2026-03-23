@@ -138,6 +138,44 @@ apt-get install -y $PACKAGES
 
 log_success "System dependencies installed"
 
+# Install PowerShell 7 (required for Exchange Online PowerShell fallback)
+log_info "Installing PowerShell 7..."
+if ! command -v pwsh &> /dev/null; then
+    # Get Ubuntu version codename
+    UBUNTU_CODENAME=$(lsb_release -cs 2>/dev/null || echo "noble")
+
+    # Download and register the Microsoft repository GPG keys
+    curl -fsSL https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb -o /tmp/packages-microsoft-prod.deb
+    dpkg -i /tmp/packages-microsoft-prod.deb
+    rm -f /tmp/packages-microsoft-prod.deb
+
+    apt-get update
+    apt-get install -y powershell
+
+    if command -v pwsh &> /dev/null; then
+        log_success "PowerShell $(pwsh --version) installed"
+
+        # Install ExchangeOnlineManagement module for PowerShell
+        log_info "Installing ExchangeOnlineManagement PowerShell module..."
+        pwsh -NoProfile -NonInteractive -Command "
+            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+            Install-Module -Name ExchangeOnlineManagement -Scope AllUsers -Force -AllowClobber
+        "
+        if [ $? -eq 0 ]; then
+            log_success "ExchangeOnlineManagement module installed"
+        else
+            log_warning "Failed to install ExchangeOnlineManagement module."
+            log_warning "PowerShell fallback for Exchange Online will not work until installed."
+            log_warning "You can install it manually: pwsh -Command 'Install-Module ExchangeOnlineManagement -Scope AllUsers -Force'"
+        fi
+    else
+        log_warning "PowerShell installation failed. Exchange Online PowerShell fallback will not be available."
+        log_warning "The application will use Microsoft Graph API instead (recommended)."
+    fi
+else
+    log_success "PowerShell already installed: $(pwsh --version)"
+fi
+
 # Install Node.js 20.x (LTS)
 log_info "Installing Node.js 20.x..."
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -

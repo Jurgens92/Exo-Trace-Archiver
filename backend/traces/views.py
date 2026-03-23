@@ -518,11 +518,34 @@ class ConfigView(views.APIView):
             for t in tenants
         ]
 
+        # Check PowerShell availability
+        import shutil
+        import platform
+        pwsh_available = bool(shutil.which('pwsh') or shutil.which('powershell'))
+        exo_module_installed = False
+        if pwsh_available:
+            import subprocess
+            try:
+                result = subprocess.run(
+                    [shutil.which('pwsh') or shutil.which('powershell'),
+                     '-NoProfile', '-NonInteractive', '-Command',
+                     "Get-Module -ListAvailable ExchangeOnlineManagement | Select-Object -First 1 -ExpandProperty Version"],
+                    capture_output=True, text=True, timeout=15
+                )
+                exo_module_installed = result.returncode == 0 and result.stdout.strip() != ''
+            except Exception:
+                pass
+
         config = {
             'multi_tenant': {
                 'enabled': True,
                 'tenant_count': tenants.count(),
                 'tenants': tenant_list,
+            },
+            'system': {
+                'platform': platform.system(),
+                'powershell_installed': pwsh_available,
+                'exchange_module_installed': exo_module_installed,
             },
             'legacy_microsoft365': {
                 'tenant_id': mask_secret(getattr(settings, 'MS365_TENANT_ID', '')),

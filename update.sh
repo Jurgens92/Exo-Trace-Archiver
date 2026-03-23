@@ -156,6 +156,30 @@ pip install gunicorn psycopg2-binary --quiet
 
 log_success "Backend dependencies updated"
 
+# Ensure PowerShell is installed (for Exchange Online PowerShell fallback)
+if ! command -v pwsh &> /dev/null; then
+    log_info "Installing PowerShell 7 (required for Exchange Online PowerShell support)..."
+    curl -fsSL https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb -o /tmp/packages-microsoft-prod.deb 2>/dev/null
+    dpkg -i /tmp/packages-microsoft-prod.deb 2>/dev/null
+    rm -f /tmp/packages-microsoft-prod.deb
+    apt-get update -qq
+    apt-get install -y powershell 2>/dev/null
+
+    if command -v pwsh &> /dev/null; then
+        log_success "PowerShell $(pwsh --version) installed"
+        # Install ExchangeOnlineManagement module
+        pwsh -NoProfile -NonInteractive -Command "
+            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+            Install-Module -Name ExchangeOnlineManagement -Scope AllUsers -Force -AllowClobber
+        " 2>/dev/null && log_success "ExchangeOnlineManagement module installed" || log_warning "Failed to install ExchangeOnlineManagement module"
+    else
+        log_warning "PowerShell installation failed. Exchange PowerShell fallback will not be available."
+        log_warning "The application will use Microsoft Graph API instead (recommended)."
+    fi
+else
+    log_info "PowerShell already installed: $(pwsh --version)"
+fi
+
 # Run migrations
 log_info "Running database migrations..."
 python manage.py makemigrations

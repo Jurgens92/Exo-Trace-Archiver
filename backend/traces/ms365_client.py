@@ -698,10 +698,16 @@ class PowerShellClient(BaseMS365Client):
         if system == 'linux':
             raise MS365APIError(
                 "PowerShell is not installed on this Linux system. "
-                "Consider switching your tenant's API method to 'graph' (Microsoft Graph API), "
-                "which is the recommended method and does not require PowerShell. "
-                "Alternatively, install PowerShell 7 on Ubuntu: "
-                "sudo apt-get update && sudo apt-get install -y powershell"
+                "To fix this, either:\n"
+                "  1. Switch your tenant's API method to 'graph' (Microsoft Graph API) in "
+                "the Tenants settings page — this is the recommended method and does not "
+                "require PowerShell.\n"
+                "  2. Or install PowerShell 7 and the Exchange module on Ubuntu:\n"
+                "     curl -fsSL https://packages.microsoft.com/config/ubuntu/"
+                "$(lsb_release -rs)/packages-microsoft-prod.deb -o /tmp/packages-microsoft-prod.deb\n"
+                "     sudo dpkg -i /tmp/packages-microsoft-prod.deb\n"
+                "     sudo apt-get update && sudo apt-get install -y powershell\n"
+                "     pwsh -Command 'Install-Module ExchangeOnlineManagement -Force'"
             )
         raise MS365APIError(
             "PowerShell not found. Install PowerShell 7: "
