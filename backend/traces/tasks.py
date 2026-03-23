@@ -231,9 +231,15 @@ def pull_message_traces_for_tenant(
             if not tenant.organization:
                 raise MS365APIError(
                     f"Graph API message trace endpoint not available and PowerShell fallback "
-                    f"cannot be used because 'organization' is not configured for tenant: {tenant.name}. "
-                    f"Either configure the organization field (e.g., 'contoso.onmicrosoft.com') "
-                    f"or add Office 365 Exchange Online API permissions in Azure AD. "
+                    f"cannot be used because 'organization' is not configured for tenant: {tenant.name}.\n"
+                    f"To fix this, choose one of:\n"
+                    f"  Option A - Set up Graph API message trace (no PowerShell needed):\n"
+                    f"    1. Provision the service principal: Connect-MgGraph -Scopes Application.ReadWrite.All; "
+                    f"New-MgServicePrincipal -AppId '8bd644d1-64a1-4d4b-ae52-2e0cbf64e373'\n"
+                    f"    2. Add ExchangeMessageTrace.Read.All permission to your Azure AD app\n"
+                    f"    3. Grant admin consent, then wait up to a few hours\n"
+                    f"  Option B - Configure 'organization' on the tenant (e.g., 'contoso.onmicrosoft.com') "
+                    f"to enable the PowerShell fallback.\n"
                     f"Original error: {str(e)}"
                 )
             # Check if PowerShell is installed before attempting fallback
@@ -241,12 +247,16 @@ def pull_message_traces_for_tenant(
             if not shutil.which('pwsh') and not shutil.which('powershell'):
                 raise MS365APIError(
                     f"Graph API message trace endpoint not available for tenant '{tenant.name}' "
-                    f"and PowerShell is not installed on this system, so the PowerShell fallback "
-                    f"cannot be used. To fix this on Ubuntu, either:\n"
-                    f"  1. Install PowerShell: sudo apt-get update && sudo apt-get install -y powershell\n"
-                    f"     Then install the module: pwsh -Command 'Install-Module ExchangeOnlineManagement -Force'\n"
-                    f"  2. Or add Office 365 Exchange Online API permissions to your Azure AD app "
-                    f"so the Graph API endpoint works directly.\n"
+                    f"and PowerShell is not installed on this system.\n"
+                    f"To fix this, choose one of:\n"
+                    f"  Option A - Set up Graph API message trace (recommended, no PowerShell needed):\n"
+                    f"    1. Provision the service principal: Connect-MgGraph -Scopes Application.ReadWrite.All; "
+                    f"New-MgServicePrincipal -AppId '8bd644d1-64a1-4d4b-ae52-2e0cbf64e373'\n"
+                    f"    2. Add ExchangeMessageTrace.Read.All permission to your Azure AD app\n"
+                    f"    3. Grant admin consent, then wait up to a few hours\n"
+                    f"  Option B - Install PowerShell on Ubuntu:\n"
+                    f"    sudo apt-get update && sudo apt-get install -y powershell\n"
+                    f"    pwsh -Command 'Install-Module ExchangeOnlineManagement -Force'\n"
                     f"Original error: {str(e)}"
                 )
             # Create PowerShell client and retry

@@ -216,14 +216,14 @@ class GraphAPIClient(BaseMS365Client):
     """
 
     # Graph API endpoints
-    # Note: As of Jan 2026, message trace is in preview
-    # The exact endpoint may change - check Microsoft docs
     GRAPH_URL = "https://graph.microsoft.com/v1.0"
     GRAPH_BETA_URL = "https://graph.microsoft.com/beta"
 
-    # Message trace endpoint (beta as of Jan 2026)
-    # This may move to v1.0 in the future
-    MESSAGE_TRACE_ENDPOINT = "/reports/getEmailActivityUserDetail"
+    # Message trace endpoint - public preview as of Jan 2026
+    # Requires ExchangeMessageTrace.Read.All permission and service principal
+    # for App ID 8bd644d1-64a1-4d4b-ae52-2e0cbf64e373 provisioned in the tenant.
+    # See: https://learn.microsoft.com/en-us/graph/api/resources/exchangemessagetrace
+    MESSAGE_TRACE_ENDPOINT = "/admin/exchange/tracing/messageTraces"
 
     def __init__(self):
         super().__init__()
@@ -511,24 +511,23 @@ class GraphAPIClient(BaseMS365Client):
 
         all_traces = []
 
-        # Format dates for API
-        # Graph API typically uses ISO 8601 format
+        # Format dates for OData $filter
         start_str = start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
         end_str = end_date.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        # Note: The exact endpoint and parameters may vary
-        # As of Jan 2026, message trace via Graph is in preview
-        # Check: https://learn.microsoft.com/en-us/graph/api/resources/mailmessage
-        #
-        # This is a placeholder implementation - adjust based on actual API
-        # The real endpoint might be something like:
-        # /reports/getMessageTrace(startDateTime={start},endDateTime={end})
+        # Graph API message trace endpoint (public preview Jan 2026)
+        # Endpoint: /beta/admin/exchange/tracing/messageTraces
+        # Requires: ExchangeMessageTrace.Read.All permission
+        # Requires: Service principal for App ID 8bd644d1-64a1-4d4b-ae52-2e0cbf64e373
+        #           provisioned in the tenant.
+        # Max 5000 results per request, paginated via @odata.nextLink
+        # See: https://learn.microsoft.com/en-us/graph/api/resources/exchangemessagetrace
 
-        url = f"{self.GRAPH_BETA_URL}/admin/exchange/messageTraces"
+        url = f"{self.GRAPH_BETA_URL}{self.MESSAGE_TRACE_ENDPOINT}"
+        capped_page_size = min(page_size, 5000)
         params = {
-            "startDateTime": start_str,
-            "endDateTime": end_str,
-            "$top": page_size,
+            "$filter": f"receivedDateTime ge {start_str} and receivedDateTime le {end_str}",
+            "$top": capped_page_size,
         }
 
         auth_retried = False
@@ -551,16 +550,28 @@ class GraphAPIClient(BaseMS365Client):
 
                 if response.status_code != 200:
                     error_text = response.text
-                    # Check if this is the "protection.outlook.com not found" error
-                    # This indicates Graph API message trace endpoint requires additional
-                    # Exchange Online Protection permissions not configured in Azure AD
-                    if (response.status_code == 400 and
-                        ('protection.outlook.com' in error_text or
-                         'AADSTS500011' in error_text)):
+                    # Check for service principal not provisioned or permission errors
+                    if ('AADSTS500011' in error_text or
+                        'protection.outlook.com' in error_text or
+                        'was not found in the tenant' in error_text):
                         raise MS365GraphAPINotAvailableError(
-                            f"Graph API message trace endpoint requires additional "
-                            f"Exchange Online Protection permissions. Consider using "
-                            f"PowerShell method instead. Original error: {error_text}"
+                            f"Graph API message trace endpoint is not set up for this tenant. "
+                            f"This requires:\n"
+                            f"  1. Provision the service principal in your tenant:\n"
+                            f"     Connect-MgGraph -Scopes Application.ReadWrite.All\n"
+                            f"     New-MgServicePrincipal -AppId '8bd644d1-64a1-4d4b-ae52-2e0cbf64e373'\n"
+                            f"     (wait up to a few hours for provisioning to complete)\n"
+                            f"  2. Add ExchangeMessageTrace.Read.All permission to your Azure AD app\n"
+                            f"  3. Grant admin consent for the permission\n"
+                            f"Alternatively, use the PowerShell API method instead.\n"
+                            f"Original error: {error_text}"
+                        )
+                    if response.status_code == 403:
+                        raise MS365GraphAPINotAvailableError(
+                            f"Insufficient permissions for Graph API message trace. "
+                            f"Your Azure AD app needs the ExchangeMessageTrace.Read.All "
+                            f"permission with admin consent granted.\n"
+                            f"Original error: {error_text}"
                         )
                     raise MS365APIError(
                         f"Graph API error: {response.status_code} - {error_text}"
@@ -1479,17 +1490,22 @@ def normalize_trace_data(trace: dict, source: str = 'graph') -> dict:
             'raw_json': trace,
         }
     else:  # graph
-        # Map Graph API field names (may vary based on actual API response)
+        # Map Graph API exchangeMessageTrace resource properties
+        # See: https://learn.microsoft.com/en-us/graph/api/resources/exchangemessagetrace
+        # Properties: messageId, receivedDateTime, senderAddress, recipientAddress,
+        #             subject, status, size, fromIP, toIP, messageTraceId
         return {
-            'message_id': trace.get('internetMessageId', trace.get('messageId', '')),
+            'message_id': trace.get('messageId', trace.get('internetMessageId', '')),
             'received_date': trace.get('receivedDateTime', trace.get('received')),
-            'sender': trace.get('sender', {}).get('emailAddress', {}).get('address', '')
-                      if isinstance(trace.get('sender'), dict)
-                      else trace.get('senderAddress', ''),
-            'recipient': trace.get('recipientAddress', ''),
+            'sender': trace.get('senderAddress', trace.get('sender', '')),
+            'recipient': trace.get('recipientAddress', trace.get('recipient', '')),
             'subject': trace.get('subject', ''),
             'status': trace.get('status', 'Unknown'),
             'size': trace.get('size', 0) or 0,
-            'event_data': trace.get('eventData', {}),
+            'event_data': {
+                'to_ip': trace.get('toIP'),
+                'from_ip': trace.get('fromIP'),
+                'message_trace_id': trace.get('messageTraceId'),
+            },
             'raw_json': trace,
         }
