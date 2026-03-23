@@ -27,7 +27,7 @@ import { LoadingPage } from '@/components/LoadingSpinner'
 import { Pagination } from '@/components/Pagination'
 import { StatusBadge, DirectionBadge } from '@/components/StatusBadge'
 import { formatDateShort } from '@/lib/utils'
-import type { TraceFilterParams, TraceStatus, TraceDirection } from '@/api/types'
+import type { TraceFilterParams } from '@/api/types'
 import { exportSearchResultsPdf, downloadBlob } from '@/api/traces'
 
 const PAGE_SIZE = 50

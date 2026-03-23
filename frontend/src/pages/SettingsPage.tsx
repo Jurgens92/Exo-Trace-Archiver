@@ -387,7 +387,7 @@ export function SettingsPage() {
                   )}
                 </Button>
                 <p className="text-sm text-muted-foreground">
-                  Pulls yesterday's message traces for <span className="font-medium">{selectedTenant.name}</span>
+                  Pulls yesterday's message traces for <span className="font-medium">{selectedTenant?.name}</span>
                 </p>
               </div>
             </div>
@@ -400,7 +400,7 @@ export function SettingsPage() {
         <CardHeader>
           <CardTitle>
             {hasTenantSelected
-              ? `${selectedTenant.name} Configuration`
+              ? `${selectedTenant?.name} Configuration`
               : 'Tenant Configuration'}
           </CardTitle>
           <CardDescription>

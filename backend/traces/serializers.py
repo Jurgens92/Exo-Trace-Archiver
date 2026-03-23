@@ -7,6 +7,8 @@ These serializers handle:
 3. Nested representations
 """
 
+from datetime import timedelta
+
 from rest_framework import serializers
 from django.utils import timezone
 from .models import MessageTraceLog, PullHistory
@@ -142,7 +144,7 @@ class ManualPullRequestSerializer(serializers.Serializer):
 
         # Exchange Online only keeps traces for 10 days
         if start_date:
-            min_date = timezone.now() - timezone.timedelta(days=10)
+            min_date = timezone.now() - timedelta(days=10)
             if start_date < min_date:
                 raise serializers.ValidationError(
                     "start_date cannot be more than 10 days ago "

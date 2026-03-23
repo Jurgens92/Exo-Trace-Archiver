@@ -390,11 +390,11 @@ def _store_traces_for_tenant(traces: list[dict], tenant, source: str = 'graph') 
         # Process batches
         if len(traces_to_create) >= batch_size:
             with transaction.atomic():
-                MessageTraceLog.objects.bulk_create(
+                created = MessageTraceLog.objects.bulk_create(
                     traces_to_create,
                     ignore_conflicts=True
                 )
-            records_new += len(traces_to_create)
+            records_new += len(created)
             traces_to_create = []
 
         if len(traces_to_update) >= batch_size:
@@ -410,11 +410,11 @@ def _store_traces_for_tenant(traces: list[dict], tenant, source: str = 'graph') 
     # Process remaining records
     if traces_to_create:
         with transaction.atomic():
-            MessageTraceLog.objects.bulk_create(
+            created = MessageTraceLog.objects.bulk_create(
                 traces_to_create,
                 ignore_conflicts=True
             )
-        records_new += len(traces_to_create)
+        records_new += len(created)
 
     if traces_to_update:
         with transaction.atomic():
@@ -703,11 +703,11 @@ def _store_traces(traces: list[dict], source: str = 'graph') -> tuple[int, int]:
         # Process batches
         if len(traces_to_create) >= batch_size:
             with transaction.atomic():
-                MessageTraceLog.objects.bulk_create(
+                created = MessageTraceLog.objects.bulk_create(
                     traces_to_create,
                     ignore_conflicts=True
                 )
-            records_new += len(traces_to_create)
+            records_new += len(created)
             traces_to_create = []
 
         if len(traces_to_update) >= batch_size:
@@ -723,11 +723,11 @@ def _store_traces(traces: list[dict], source: str = 'graph') -> tuple[int, int]:
     # Process remaining records
     if traces_to_create:
         with transaction.atomic():
-            MessageTraceLog.objects.bulk_create(
+            created = MessageTraceLog.objects.bulk_create(
                 traces_to_create,
                 ignore_conflicts=True
             )
-        records_new += len(traces_to_create)
+        records_new += len(created)
 
     if traces_to_update:
         with transaction.atomic():
