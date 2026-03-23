@@ -289,6 +289,17 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                     'certificate_path': "Certificate path is required for certificate authentication."
                 })
 
+        # Validate PowerShell availability when powershell API method is selected
+        api_method = attrs.get('api_method', Tenant.ApiMethod.GRAPH)
+        if api_method == Tenant.ApiMethod.POWERSHELL:
+            import shutil
+            if not shutil.which('pwsh') and not shutil.which('powershell'):
+                raise serializers.ValidationError({
+                    'api_method': "PowerShell is not installed on this system. "
+                                  "Use 'graph' (Microsoft Graph API) instead, which is the "
+                                  "recommended method and does not require PowerShell."
+                })
+
         return attrs
 
     def create(self, validated_data):
@@ -327,6 +338,17 @@ class TenantUpdateSerializer(serializers.ModelSerializer):
             if not cert_path:
                 raise serializers.ValidationError({
                     'certificate_path': "Certificate path is required for certificate authentication."
+                })
+
+        # Validate PowerShell availability when powershell API method is selected
+        api_method = attrs.get('api_method', instance.api_method if instance else Tenant.ApiMethod.GRAPH)
+        if api_method == Tenant.ApiMethod.POWERSHELL:
+            import shutil
+            if not shutil.which('pwsh') and not shutil.which('powershell'):
+                raise serializers.ValidationError({
+                    'api_method': "PowerShell is not installed on this system. "
+                                  "Use 'graph' (Microsoft Graph API) instead, which is the "
+                                  "recommended method and does not require PowerShell."
                 })
 
         return attrs
