@@ -289,16 +289,12 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                     'certificate_path': "Certificate path is required for certificate authentication."
                 })
 
-        # Validate PowerShell availability when powershell API method is selected
+        # Auto-switch to Graph API if PowerShell is not available
         api_method = attrs.get('api_method', Tenant.ApiMethod.GRAPH)
         if api_method == Tenant.ApiMethod.POWERSHELL:
             import shutil
             if not shutil.which('pwsh') and not shutil.which('powershell'):
-                raise serializers.ValidationError({
-                    'api_method': "PowerShell is not installed on this system. "
-                                  "Use 'graph' (Microsoft Graph API) instead, which is the "
-                                  "recommended method and does not require PowerShell."
-                })
+                attrs['api_method'] = Tenant.ApiMethod.GRAPH
 
         return attrs
 
@@ -340,16 +336,12 @@ class TenantUpdateSerializer(serializers.ModelSerializer):
                     'certificate_path': "Certificate path is required for certificate authentication."
                 })
 
-        # Validate PowerShell availability when powershell API method is selected
+        # Auto-switch to Graph API if PowerShell is not available
         api_method = attrs.get('api_method', instance.api_method if instance else Tenant.ApiMethod.GRAPH)
         if api_method == Tenant.ApiMethod.POWERSHELL:
             import shutil
             if not shutil.which('pwsh') and not shutil.which('powershell'):
-                raise serializers.ValidationError({
-                    'api_method': "PowerShell is not installed on this system. "
-                                  "Use 'graph' (Microsoft Graph API) instead, which is the "
-                                  "recommended method and does not require PowerShell."
-                })
+                attrs['api_method'] = Tenant.ApiMethod.GRAPH
 
         return attrs
 
