@@ -531,12 +531,19 @@ class GraphAPIClient(BaseMS365Client):
             "$top": page_size,
         }
 
+        auth_retried = False
         try:
             while url:
                 response = self._make_graph_request(url, headers, params)
 
                 if response.status_code == 401:
-                    # Token expired, re-authenticate
+                    if auth_retried:
+                        raise MS365APIError(
+                            "Authentication failed after re-authentication attempt. "
+                            "Check app permissions and credentials."
+                        )
+                    # Token expired, re-authenticate once
+                    auth_retried = True
                     self._access_token = None
                     self._ensure_authenticated()
                     headers["Authorization"] = f"Bearer {self._access_token}"

@@ -8,6 +8,7 @@ import {
   useContext,
   useState,
   useEffect,
+  useMemo,
   ReactNode,
   useCallback,
 } from 'react'
@@ -41,7 +42,10 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   const [selectedTenant, setSelectedTenant] = useState<TenantInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  const availableTenants = user?.accessible_tenants ?? []
+  const availableTenants = useMemo(
+    () => user?.accessible_tenants ?? [],
+    [user?.accessible_tenants]
+  )
 
   // Load selected tenant from localStorage on mount
   useEffect(() => {

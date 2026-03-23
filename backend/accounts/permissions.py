@@ -118,9 +118,9 @@ def get_accessible_tenant_ids(user) -> list[int]:
     if hasattr(user, 'profile') and user.profile.is_admin:
         return list(Tenant.objects.filter(is_active=True).values_list('id', flat=True))
 
-    # Regular users only get explicitly assigned tenants
+    # Regular users only get explicitly assigned active tenants
     return list(
-        TenantPermission.objects.filter(user=user)
+        TenantPermission.objects.filter(user=user, tenant__is_active=True)
         .values_list('tenant_id', flat=True)
     )
 
