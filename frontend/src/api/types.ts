@@ -129,6 +129,11 @@ export interface ConfigResponse {
       organization: string
     }[]
   }
+  system?: {
+    platform: string
+    powershell_installed: boolean
+    exchange_module_installed: boolean
+  }
   legacy_microsoft365?: {
     tenant_id: string
     client_id: string

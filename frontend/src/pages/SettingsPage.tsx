@@ -505,6 +505,43 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* System Info */}
+      {config.system && (
+        <Card>
+          <CardHeader>
+            <CardTitle>System</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <ConfigItem
+                label="Platform"
+                value={config.system.platform}
+              />
+              <ConfigItem
+                label="PowerShell Installed"
+                value={config.system.powershell_installed}
+                type="boolean"
+                trueLabel="Installed"
+                falseLabel="Not installed"
+              />
+              <ConfigItem
+                label="ExchangeOnlineManagement Module"
+                value={config.system.exchange_module_installed}
+                type="boolean"
+                trueLabel="Installed"
+                falseLabel="Not installed"
+              />
+            </div>
+            {!config.system.powershell_installed && (
+              <p className="text-sm text-amber-600">
+                PowerShell is not installed. Tenants using the Exchange PowerShell API method will automatically fall back to Microsoft Graph API.
+                To install PowerShell on Ubuntu: <code className="bg-muted px-1 rounded">sudo apt-get install -y powershell</code>
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Debug Mode Warning */}
       {config.debug_mode && (
         <Card className="border-destructive">

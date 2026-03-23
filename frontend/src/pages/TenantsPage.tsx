@@ -468,10 +468,17 @@ function CreateTenantForm({ onSubmit, onCancel, isLoading }: CreateTenantFormPro
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="graph">Microsoft Graph API</SelectItem>
+                  <SelectItem value="graph">Microsoft Graph API (Recommended)</SelectItem>
                   <SelectItem value="powershell">Exchange PowerShell</SelectItem>
                 </SelectContent>
               </Select>
+              {formData.api_method === 'powershell' && (
+                <p className="text-xs text-amber-600 mt-1">
+                  <AlertCircle className="inline h-3 w-3 mr-1" />
+                  PowerShell requires <code>pwsh</code> and the ExchangeOnlineManagement module installed on the server.
+                  On Ubuntu, Graph API is recommended as it has no extra dependencies.
+                </p>
+              )}
             </div>
 
             {formData.auth_method === 'certificate' && (
@@ -687,10 +694,17 @@ function EditTenantForm({ tenant, onSubmit, onCancel, isLoading }: EditTenantFor
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="graph">Microsoft Graph API</SelectItem>
+                  <SelectItem value="graph">Microsoft Graph API (Recommended)</SelectItem>
                   <SelectItem value="powershell">Exchange PowerShell</SelectItem>
                 </SelectContent>
               </Select>
+              {formData.api_method === 'powershell' && (
+                <p className="text-xs text-amber-600 mt-1">
+                  <AlertCircle className="inline h-3 w-3 mr-1" />
+                  PowerShell requires <code>pwsh</code> and the ExchangeOnlineManagement module installed on the server.
+                  On Ubuntu, Graph API is recommended as it has no extra dependencies.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit_is_active">Status</Label>
