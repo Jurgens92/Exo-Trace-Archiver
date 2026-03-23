@@ -11,7 +11,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
-from .models import UserProfile, Tenant, TenantPermission, AppSettings
+from .models import UserProfile, Tenant, TenantPermission, TenantAuditLog, AppSettings
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -466,6 +466,25 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             }
             for t in tenants
         ]
+
+
+class TenantAuditLogSerializer(serializers.ModelSerializer):
+    """Serializer for tenant audit log entries."""
+
+    performed_by_username = serializers.CharField(
+        source='performed_by.username',
+        read_only=True,
+        default=None
+    )
+
+    class Meta:
+        model = TenantAuditLog
+        fields = [
+            'id', 'tenant', 'tenant_name', 'action', 'status',
+            'detail', 'error_message', 'error_traceback', 'metadata',
+            'performed_by', 'performed_by_username', 'created_at',
+        ]
+        read_only_fields = fields
 
 
 class AppSettingsSerializer(serializers.ModelSerializer):

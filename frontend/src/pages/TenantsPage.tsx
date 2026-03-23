@@ -13,6 +13,9 @@ import {
   Plug,
   Upload,
   FileKey,
+  ScrollText,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -44,8 +47,9 @@ import {
   deleteTenant,
   testTenantConnection,
   uploadCertificate,
+  getTenantAuditLogs,
 } from '@/api/tenants'
-import type { Tenant, TenantCreate, TenantUpdate } from '@/api/types'
+import type { Tenant, TenantCreate, TenantUpdate, TenantAuditLog } from '@/api/types'
 
 export function TenantsPage() {
   const { isAdmin } = useAuth()
@@ -65,11 +69,18 @@ export function TenantsPage() {
     mutationFn: createTenant,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] })
+      queryClient.invalidateQueries({ queryKey: ['audit-logs'] })
       setShowCreateForm(false)
       toast({ title: 'Tenant created successfully' })
     },
-    onError: () => {
-      toast({ title: 'Failed to create tenant', variant: 'destructive' })
+    onError: (error: any) => {
+      const detail = error?.response?.data?.detail
+        || error?.response?.data?.tenant_id?.[0]
+        || error?.response?.data?.certificate_path?.[0]
+        || error?.response?.data?.client_secret?.[0]
+        || error?.message
+        || 'Unknown error'
+      toast({ title: 'Failed to create tenant', description: String(detail), variant: 'destructive' })
     },
   })
 
@@ -77,11 +88,13 @@ export function TenantsPage() {
     mutationFn: ({ id, data }: { id: number; data: TenantUpdate }) => updateTenant(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] })
+      queryClient.invalidateQueries({ queryKey: ['audit-logs'] })
       setEditingTenant(null)
       toast({ title: 'Tenant updated successfully' })
     },
-    onError: () => {
-      toast({ title: 'Failed to update tenant', variant: 'destructive' })
+    onError: (error: any) => {
+      const detail = error?.response?.data?.detail || error?.message || 'Unknown error'
+      toast({ title: 'Failed to update tenant', description: String(detail), variant: 'destructive' })
     },
   })
 
@@ -89,24 +102,35 @@ export function TenantsPage() {
     mutationFn: deleteTenant,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] })
+      queryClient.invalidateQueries({ queryKey: ['audit-logs'] })
       toast({ title: 'Tenant deleted successfully' })
     },
-    onError: () => {
-      toast({ title: 'Failed to delete tenant', variant: 'destructive' })
+    onError: (error: any) => {
+      const detail = error?.response?.data?.detail || error?.message || 'Unknown error'
+      toast({ title: 'Failed to delete tenant', description: String(detail), variant: 'destructive' })
     },
   })
 
   const testConnectionMutation = useMutation({
     mutationFn: testTenantConnection,
     onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['audit-logs'] })
       toast({
         title: data.status === 'success' ? 'Connection successful' : 'Connection failed',
         description: data.detail,
         variant: data.status === 'success' ? 'default' : 'destructive',
       })
     },
-    onError: () => {
-      toast({ title: 'Connection test failed', variant: 'destructive' })
+    onError: (error: any) => {
+      queryClient.invalidateQueries({ queryKey: ['audit-logs'] })
+      const responseData = error?.response?.data
+      const detail = responseData?.detail || error?.message || 'Unknown error'
+      const errorType = responseData?.error_type || ''
+      toast({
+        title: 'Connection test failed',
+        description: errorType ? `${errorType}: ${detail}` : String(detail),
+        variant: 'destructive',
+      })
     },
   })
 
@@ -290,6 +314,9 @@ export function TenantsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Audit Log */}
+      <AuditLogSection />
     </div>
   )
 }
@@ -768,6 +795,176 @@ function EditTenantForm({ tenant, onSubmit, onCancel, isLoading }: EditTenantFor
             </Button>
           </div>
         </form>
+      </CardContent>
+    </Card>
+  )
+}
+
+const ACTION_LABELS: Record<string, string> = {
+  create: 'Created',
+  update: 'Updated',
+  delete: 'Deleted',
+  test_connection: 'Connection Test',
+  certificate_upload: 'Certificate Upload',
+}
+
+function AuditLogSection() {
+  const [expanded, setExpanded] = useState<number | null>(null)
+  const [filterAction, setFilterAction] = useState<string>('')
+  const [filterStatus, setFilterStatus] = useState<string>('')
+
+  const { data: auditData, isLoading } = useQuery({
+    queryKey: ['audit-logs', filterAction, filterStatus],
+    queryFn: () =>
+      getTenantAuditLogs({
+        action: filterAction && filterAction !== 'all' ? filterAction : undefined,
+        status: filterStatus && filterStatus !== 'all' ? filterStatus : undefined,
+      }),
+  })
+
+  const logs = auditData?.results || []
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ScrollText className="h-5 w-5" />
+          Audit Log
+        </CardTitle>
+        <CardDescription>
+          Recent tenant operations with detailed error information for troubleshooting
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex gap-4 mb-4">
+          <Select value={filterAction} onValueChange={setFilterAction}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="All actions" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All actions</SelectItem>
+              <SelectItem value="create">Created</SelectItem>
+              <SelectItem value="update">Updated</SelectItem>
+              <SelectItem value="delete">Deleted</SelectItem>
+              <SelectItem value="test_connection">Connection Test</SelectItem>
+              <SelectItem value="certificate_upload">Certificate Upload</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="All statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="success">Success</SelectItem>
+              <SelectItem value="failure">Failure</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {isLoading ? (
+          <div className="flex justify-center py-8">
+            <LoadingSpinner />
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[180px]">Time</TableHead>
+                <TableHead>Tenant</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>User</TableHead>
+                <TableHead>Detail</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {logs.map((log) => (
+                <>
+                  <TableRow key={log.id} className={log.status === 'failure' ? 'bg-destructive/5' : ''}>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {new Date(log.created_at).toLocaleString()}
+                    </TableCell>
+                    <TableCell className="font-medium">{log.tenant_name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{ACTION_LABELS[log.action] || log.action}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={log.status === 'success' ? 'default' : 'destructive'}>
+                        {log.status === 'success' ? (
+                          <><Check className="h-3 w-3 mr-1" /> Success</>
+                        ) : (
+                          <><X className="h-3 w-3 mr-1" /> Failed</>
+                        )}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {log.performed_by_username || '-'}
+                    </TableCell>
+                    <TableCell className="text-sm max-w-[300px] truncate" title={log.detail}>
+                      {log.detail}
+                    </TableCell>
+                    <TableCell>
+                      {(log.error_message || log.error_traceback || (log.metadata && Object.keys(log.metadata).length > 0)) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setExpanded(expanded === log.id ? null : log.id)}
+                        >
+                          {expanded === log.id ? (
+                            <ChevronUp className="h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                  {expanded === log.id && (
+                    <TableRow key={`${log.id}-detail`}>
+                      <TableCell colSpan={7} className="bg-muted/50">
+                        <div className="space-y-3 py-2">
+                          {log.error_message && (
+                            <div>
+                              <p className="text-sm font-medium text-destructive mb-1">Error Message</p>
+                              <pre className="text-xs bg-background rounded p-3 overflow-x-auto whitespace-pre-wrap border border-destructive/20">
+                                {log.error_message}
+                              </pre>
+                            </div>
+                          )}
+                          {log.error_traceback && (
+                            <div>
+                              <p className="text-sm font-medium text-destructive mb-1">Traceback</p>
+                              <pre className="text-xs bg-background rounded p-3 overflow-x-auto whitespace-pre-wrap border border-destructive/20 max-h-[300px] overflow-y-auto">
+                                {log.error_traceback}
+                              </pre>
+                            </div>
+                          )}
+                          {log.metadata && Object.keys(log.metadata).length > 0 && (
+                            <div>
+                              <p className="text-sm font-medium mb-1">Diagnostics</p>
+                              <pre className="text-xs bg-background rounded p-3 overflow-x-auto whitespace-pre-wrap border">
+                                {JSON.stringify(log.metadata, null, 2)}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
+              ))}
+              {logs.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    No audit log entries yet.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        )}
       </CardContent>
     </Card>
   )

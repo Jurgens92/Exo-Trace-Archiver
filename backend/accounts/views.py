@@ -24,7 +24,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 
-from .models import UserProfile, Tenant, TenantPermission
+from .models import UserProfile, Tenant, TenantPermission, TenantAuditLog
 from .serializers import (
     UserListSerializer,
     UserDetailSerializer,
@@ -38,8 +38,30 @@ from .serializers import (
     TenantPermissionCreateSerializer,
     BulkTenantPermissionSerializer,
     CurrentUserSerializer,
+    TenantAuditLogSerializer,
 )
+import logging
+import traceback
+
 from .permissions import IsAdminRole, get_accessible_tenant_ids
+
+logger = logging.getLogger('accounts')
+
+
+def _create_audit_log(tenant, action, status, user=None, detail='',
+                      error_message='', error_traceback='', metadata=None):
+    """Create a TenantAuditLog entry."""
+    TenantAuditLog.objects.create(
+        tenant=tenant if tenant and tenant.pk else None,
+        tenant_name=tenant.name if tenant else 'Unknown',
+        action=action,
+        status=status,
+        detail=detail,
+        error_message=error_message,
+        error_traceback=error_traceback,
+        metadata=metadata or {},
+        performed_by=user,
+    )
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -185,6 +207,78 @@ class TenantViewSet(viewsets.ModelViewSet):
             return TenantUpdateSerializer
         return TenantDetailSerializer
 
+    def perform_create(self, serializer):
+        """Create tenant with audit logging."""
+        try:
+            tenant = serializer.save()
+            _create_audit_log(
+                tenant=tenant,
+                action=TenantAuditLog.Action.CREATE,
+                status=TenantAuditLog.Status.SUCCESS,
+                user=self.request.user,
+                detail=f"Tenant '{tenant.name}' created with auth_method={tenant.auth_method}, api_method={tenant.api_method}",
+                metadata={
+                    'tenant_id': tenant.tenant_id,
+                    'client_id': tenant.client_id,
+                    'auth_method': tenant.auth_method,
+                    'api_method': tenant.api_method,
+                    'organization': tenant.organization,
+                    'has_certificate': bool(tenant.certificate_path),
+                    'has_secret': bool(tenant.client_secret),
+                },
+            )
+        except Exception as e:
+            logger.error(f"Failed to create tenant: {e}")
+            raise
+
+    def perform_update(self, serializer):
+        """Update tenant with audit logging."""
+        tenant = serializer.instance
+        changed_fields = list(serializer.validated_data.keys())
+        old_values = {f: getattr(tenant, f) for f in changed_fields}
+        # Mask sensitive fields
+        for sensitive in ('client_secret', 'certificate_password'):
+            if sensitive in old_values:
+                old_values[sensitive] = '***' if old_values[sensitive] else ''
+
+        tenant = serializer.save()
+
+        new_values = {f: getattr(tenant, f) for f in changed_fields}
+        for sensitive in ('client_secret', 'certificate_password'):
+            if sensitive in new_values:
+                new_values[sensitive] = '***' if new_values[sensitive] else ''
+
+        _create_audit_log(
+            tenant=tenant,
+            action=TenantAuditLog.Action.UPDATE,
+            status=TenantAuditLog.Status.SUCCESS,
+            user=self.request.user,
+            detail=f"Tenant '{tenant.name}' updated. Changed fields: {', '.join(changed_fields)}",
+            metadata={
+                'changed_fields': changed_fields,
+                'old_values': {k: str(v) for k, v in old_values.items()},
+                'new_values': {k: str(v) for k, v in new_values.items()},
+            },
+        )
+
+    def perform_destroy(self, instance):
+        """Delete tenant with audit logging."""
+        tenant_name = instance.name
+        tenant_id_str = instance.tenant_id
+        # Log before delete since the FK will become null
+        _create_audit_log(
+            tenant=None,
+            action=TenantAuditLog.Action.DELETE,
+            status=TenantAuditLog.Status.SUCCESS,
+            user=self.request.user,
+            detail=f"Tenant '{tenant_name}' (Azure ID: {tenant_id_str}) deleted",
+            metadata={
+                'tenant_id': tenant_id_str,
+                'tenant_name': tenant_name,
+            },
+        )
+        instance.delete()
+
     @action(detail=True, methods=['get'])
     def users(self, request, pk=None):
         """Get list of users with access to this tenant."""
@@ -266,25 +360,66 @@ class TenantViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def test_connection(self, request, pk=None):
         """Test connection to the MS365 tenant."""
-        import logging
-        logger = logging.getLogger('accounts')
-
         tenant = self.get_object()
+
+        # Gather diagnostic info
+        diag = {
+            'tenant_id': tenant.tenant_id,
+            'client_id': tenant.client_id,
+            'auth_method': tenant.auth_method,
+            'api_method': tenant.api_method,
+            'has_certificate_path': bool(tenant.certificate_path),
+            'certificate_path': tenant.certificate_path or '',
+            'has_certificate_thumbprint': bool(tenant.certificate_thumbprint),
+            'has_certificate_password': bool(tenant.certificate_password),
+            'has_client_secret': bool(tenant.client_secret),
+            'organization': tenant.organization,
+        }
+
+        # Check if certificate file exists (for cert auth)
+        if tenant.auth_method == 'certificate' and tenant.certificate_path:
+            from pathlib import Path
+            cert_exists = Path(tenant.certificate_path).exists()
+            diag['certificate_file_exists'] = cert_exists
 
         try:
             from traces.ms365_client import get_ms365_client_for_tenant
             client = get_ms365_client_for_tenant(tenant)
             # Try to authenticate
             client._get_access_token()
+
+            _create_audit_log(
+                tenant=tenant,
+                action=TenantAuditLog.Action.TEST_CONNECTION,
+                status=TenantAuditLog.Status.SUCCESS,
+                user=request.user,
+                detail=f"Connection test successful for tenant '{tenant.name}'",
+                metadata=diag,
+            )
             return Response({
                 'status': 'success',
                 'detail': 'Successfully authenticated with tenant.'
             })
         except Exception as e:
-            logger.error(f"Test connection failed for tenant {tenant.name}: {str(e)}")
+            tb = traceback.format_exc()
+            error_str = str(e)
+            logger.error(f"Test connection failed for tenant {tenant.name}: {error_str}\n{tb}")
+
+            _create_audit_log(
+                tenant=tenant,
+                action=TenantAuditLog.Action.TEST_CONNECTION,
+                status=TenantAuditLog.Status.FAILURE,
+                user=request.user,
+                detail=f"Connection test failed for tenant '{tenant.name}'",
+                error_message=error_str,
+                error_traceback=tb,
+                metadata=diag,
+            )
             return Response({
                 'status': 'failed',
-                'detail': str(e)
+                'detail': error_str,
+                'error_type': type(e).__name__,
+                'diagnostics': diag,
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -424,6 +559,16 @@ class CertificateUploadView(views.APIView):
             }, status=status.HTTP_201_CREATED)
 
         except IOError as e:
+            _create_audit_log(
+                tenant=None,
+                action=TenantAuditLog.Action.CERTIFICATE_UPLOAD,
+                status=TenantAuditLog.Status.FAILURE,
+                user=request.user,
+                detail=f"Certificate upload failed: {cert_file.name}",
+                error_message=str(e),
+                error_traceback=traceback.format_exc(),
+                metadata={'original_filename': cert_file.name, 'file_size': cert_file.size},
+            )
             return Response(
                 {'detail': f'Failed to save certificate: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -521,3 +666,22 @@ class AppSettingsView(views.APIView):
             'message': 'Settings updated successfully',
             'settings': AppSettingsSerializer(settings).data
         })
+
+
+class TenantAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Read-only ViewSet for viewing tenant audit logs.
+
+    Admin-only. Supports filtering by tenant, action, and status.
+    """
+
+    queryset = TenantAuditLog.objects.select_related(
+        'tenant', 'performed_by'
+    ).order_by('-created_at')
+    serializer_class = TenantAuditLogSerializer
+    permission_classes = [IsAuthenticated, IsAdminRole]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['tenant', 'action', 'status']
+    search_fields = ['tenant_name', 'detail', 'error_message']
+    ordering_fields = ['created_at']
+    ordering = ['-created_at']

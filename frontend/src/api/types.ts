@@ -280,6 +280,22 @@ export interface CurrentUser {
   }[]
 }
 
+// Tenant Audit Log
+export interface TenantAuditLog {
+  id: number
+  tenant: number | null
+  tenant_name: string
+  action: 'create' | 'update' | 'delete' | 'test_connection' | 'certificate_upload'
+  status: 'success' | 'failure'
+  detail: string
+  error_message: string
+  error_traceback: string
+  metadata: Record<string, unknown>
+  performed_by: number | null
+  performed_by_username: string | null
+  created_at: string
+}
+
 // Trace filter params
 export interface TraceFilterParams {
   search?: string

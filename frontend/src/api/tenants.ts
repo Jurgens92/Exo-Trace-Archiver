@@ -8,6 +8,7 @@ import type {
   TenantCreate,
   TenantUpdate,
   TenantPermission,
+  TenantAuditLog,
   PaginatedResponse,
 } from './types'
 
@@ -87,9 +88,24 @@ export async function removeTenantUsers(
 // Test tenant connection (admin only)
 export async function testTenantConnection(
   tenantId: number
-): Promise<{ status: string; detail: string }> {
-  const response = await apiClient.post<{ status: string; detail: string }>(
+): Promise<{ status: string; detail: string; error_type?: string; diagnostics?: Record<string, unknown> }> {
+  const response = await apiClient.post<{ status: string; detail: string; error_type?: string; diagnostics?: Record<string, unknown> }>(
     `/accounts/tenants/${tenantId}/test_connection/`
+  )
+  return response.data
+}
+
+// Get tenant audit logs (admin only)
+export async function getTenantAuditLogs(params?: {
+  tenant?: number
+  action?: string
+  status?: string
+  search?: string
+  page?: number
+}): Promise<PaginatedResponse<TenantAuditLog>> {
+  const response = await apiClient.get<PaginatedResponse<TenantAuditLog>>(
+    '/accounts/audit-logs/',
+    { params }
   )
   return response.data
 }
