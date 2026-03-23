@@ -75,10 +75,11 @@ fi
 INSTALL_DIR="/opt/exo-trace-archiver"
 DB_NAME="exo_trace_archiver"
 DB_USER="exo_trace_archiver"
-DB_PASSWORD=$(openssl rand -base64 32)
-SECRET_KEY=$(openssl rand -base64 64)
+DB_PASSWORD=$(openssl rand -hex 32)
+SECRET_KEY=$(openssl rand -hex 64)
 ADMIN_USERNAME="admin"
 ADMIN_PASSWORD="Adm1n@Secure#2026!"
+USER_PROVIDED_EMAIL="$ADMIN_EMAIL"
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@exo-trace-archiver.local}"
 GITHUB_REPO="https://github.com/Jurgens92/Exo-Trace-Archiver.git"
 
@@ -398,9 +399,10 @@ if [ "$USE_HTTPS" = "true" ]; then
     log_info "Certbot will automatically configure SSL and set up auto-renewal"
 
     # Determine admin email for Let's Encrypt
-    if [ -z "$ADMIN_EMAIL" ]; then
-        CERT_EMAIL="admin@exo-trace-archiver.local"
+    if [ -z "$USER_PROVIDED_EMAIL" ]; then
+        CERT_EMAIL="$ADMIN_EMAIL"
         log_warning "No ADMIN_EMAIL provided, using default: $CERT_EMAIL"
+        log_warning "Let's Encrypt renewal warnings will be sent to this email."
         log_info "For production, set ADMIN_EMAIL environment variable for Let's Encrypt notifications"
     else
         CERT_EMAIL="$ADMIN_EMAIL"
