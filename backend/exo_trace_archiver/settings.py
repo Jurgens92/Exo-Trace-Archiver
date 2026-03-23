@@ -132,6 +132,17 @@ CERTIFICATES_DIR.mkdir(exist_ok=True)
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# HTTPS / Security Configuration
+# These are set automatically by install.sh when HTTPS is enabled
+SECURE_SSL_REDIRECT = env.bool('SECURE_SSL_REDIRECT', default=False)
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
+
+# When SSL redirect is enabled, also enable secure cookies
+if SECURE_SSL_REDIRECT:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 # CORS Configuration
 # Required for React frontend to communicate with Django API
 CORS_ALLOWED_ORIGINS = env('CORS_ALLOWED_ORIGINS')
