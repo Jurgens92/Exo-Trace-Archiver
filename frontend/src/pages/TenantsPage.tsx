@@ -817,8 +817,8 @@ function AuditLogSection() {
     queryKey: ['audit-logs', filterAction, filterStatus],
     queryFn: () =>
       getTenantAuditLogs({
-        action: filterAction || undefined,
-        status: filterStatus || undefined,
+        action: filterAction && filterAction !== 'all' ? filterAction : undefined,
+        status: filterStatus && filterStatus !== 'all' ? filterStatus : undefined,
       }),
   })
 

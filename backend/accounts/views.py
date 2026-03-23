@@ -265,6 +265,7 @@ class TenantViewSet(viewsets.ModelViewSet):
         """Delete tenant with audit logging."""
         tenant_name = instance.name
         tenant_id_str = instance.tenant_id
+        # Log before delete since the FK will become null
         _create_audit_log(
             tenant=None,
             action=TenantAuditLog.Action.DELETE,
@@ -276,13 +277,7 @@ class TenantViewSet(viewsets.ModelViewSet):
                 'tenant_name': tenant_name,
             },
         )
-        # Override tenant_name since tenant FK will be null after delete
-        log = TenantAuditLog.objects.filter(
-            action=TenantAuditLog.Action.DELETE,
-            tenant_name=tenant_name,
-        ).order_by('-created_at').first()
         instance.delete()
-        # Ensure tenant_name is preserved (it's set from the tenant object above)
 
     @action(detail=True, methods=['get'])
     def users(self, request, pk=None):
