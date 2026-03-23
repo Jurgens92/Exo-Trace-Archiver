@@ -49,7 +49,7 @@ import {
   uploadCertificate,
   getTenantAuditLogs,
 } from '@/api/tenants'
-import type { Tenant, TenantCreate, TenantUpdate, TenantAuditLog } from '@/api/types'
+import type { Tenant, TenantCreate, TenantUpdate} from '@/api/types'
 
 export function TenantsPage() {
   const { isAdmin } = useAuth()
