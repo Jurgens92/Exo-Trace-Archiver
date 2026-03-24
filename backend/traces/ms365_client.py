@@ -536,10 +536,39 @@ class GraphAPIClient(BaseMS365Client):
                 response = self._make_graph_request(url, headers, params)
 
                 if response.status_code == 401:
+                    error_text = response.text
+                    # Check if this is a permission/service principal issue, not a token expiry
+                    if ('AADSTS500011' in error_text or
+                        'was not found in the tenant' in error_text or
+                        'protection.outlook.com' in error_text or
+                        'UnknownError' in error_text):
+                        raise MS365GraphAPINotAvailableError(
+                            f"Graph API message trace endpoint returned 401 - the service principal "
+                            f"for the message trace API may not be provisioned in your tenant.\n"
+                            f"To fix this:\n"
+                            f"  1. Provision the service principal (run from any machine with "
+                            f"Microsoft.Graph PowerShell module):\n"
+                            f"     Connect-MgGraph -Scopes Application.ReadWrite.All\n"
+                            f"     New-MgServicePrincipal -AppId '8bd644d1-64a1-4d4b-ae52-2e0cbf64e373'\n"
+                            f"  2. Add ExchangeMessageTrace.Read.All permission to your Azure AD app\n"
+                            f"  3. Grant admin consent, then wait up to a few hours\n"
+                            f"Original error: {error_text}"
+                        )
                     if auth_retried:
-                        raise MS365APIError(
-                            "Authentication failed after re-authentication attempt. "
-                            "Check app permissions and credentials."
+                        raise MS365GraphAPINotAvailableError(
+                            f"Graph API message trace endpoint returned 401 after re-authentication. "
+                            f"This usually means the ExchangeMessageTrace.Read.All permission is not "
+                            f"granted, or the service principal for the message trace API is not "
+                            f"provisioned in your tenant.\n"
+                            f"To fix this:\n"
+                            f"  1. Provision the service principal:\n"
+                            f"     Connect-MgGraph -Scopes Application.ReadWrite.All\n"
+                            f"     New-MgServicePrincipal -AppId '8bd644d1-64a1-4d4b-ae52-2e0cbf64e373'\n"
+                            f"  2. Add ExchangeMessageTrace.Read.All permission to your Azure AD app\n"
+                            f"  3. Grant admin consent, then wait up to a few hours\n"
+                            f"If this tenant is configured for 'graph' but you haven't set up the "
+                            f"message trace permissions yet, the PowerShell fallback will be attempted.\n"
+                            f"Original error: {error_text}"
                         )
                     # Token expired, re-authenticate once
                     auth_retried = True
@@ -990,14 +1019,26 @@ def get_ms365_client_for_tenant(tenant) -> 'TenantGraphAPIClient | TenantPowerSh
         logger.info(f"Using Microsoft Graph API client for tenant: {tenant.name}")
         return TenantGraphAPIClient(tenant)
     else:
-        # Check for PowerShell availability; fall back to Graph API if not installed
+        # Check for PowerShell availability; raise clear error if not installed
         import shutil
         if not shutil.which('pwsh') and not shutil.which('powershell'):
             logger.warning(
                 f"Tenant '{tenant.name}' is configured to use PowerShell, but PowerShell "
-                f"is not installed on this system. Falling back to Microsoft Graph API."
+                f"is not installed on this system."
             )
-            return TenantGraphAPIClient(tenant)
+            raise MS365APIError(
+                f"Tenant '{tenant.name}' is configured to use Exchange Online PowerShell, "
+                f"but PowerShell (pwsh) is not installed on this system.\n"
+                f"To fix this, choose one of:\n"
+                f"  Option A - Install PowerShell on Ubuntu:\n"
+                f"    sudo apt-get update && sudo apt-get install -y powershell\n"
+                f"    pwsh -Command 'Install-Module ExchangeOnlineManagement -Force'\n"
+                f"  Option B - Switch this tenant's API method to 'graph' in the Tenants page.\n"
+                f"    Note: Graph API message trace requires additional setup:\n"
+                f"    Connect-MgGraph -Scopes Application.ReadWrite.All\n"
+                f"    New-MgServicePrincipal -AppId '8bd644d1-64a1-4d4b-ae52-2e0cbf64e373'\n"
+                f"    Then add ExchangeMessageTrace.Read.All permission and grant admin consent."
+            )
         logger.info(f"Using Exchange Online PowerShell client for tenant: {tenant.name}")
         return TenantPowerShellClient(tenant)
 
