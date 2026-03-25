@@ -747,6 +747,7 @@ class PowerShellClient(BaseMS365Client):
                 "$(lsb_release -rs)/packages-microsoft-prod.deb -o /tmp/packages-microsoft-prod.deb\n"
                 "     sudo dpkg -i /tmp/packages-microsoft-prod.deb\n"
                 "     sudo apt-get update && sudo apt-get install -y powershell\n"
+                "     sudo pwsh -Command 'Install-Module PSWSMan -Force; Install-WSMan'\n"
                 "     pwsh -Command 'Install-Module ExchangeOnlineManagement -Force'"
             )
         raise MS365APIError(
@@ -1032,6 +1033,7 @@ def get_ms365_client_for_tenant(tenant) -> 'TenantGraphAPIClient | TenantPowerSh
                 f"To fix this, choose one of:\n"
                 f"  Option A - Install PowerShell on Ubuntu:\n"
                 f"    sudo apt-get update && sudo apt-get install -y powershell\n"
+                f"    sudo pwsh -Command 'Install-Module PSWSMan -Force; Install-WSMan'\n"
                 f"    pwsh -Command 'Install-Module ExchangeOnlineManagement -Force'\n"
                 f"  Option B - Switch this tenant's API method to 'graph' in the Tenants page.\n"
                 f"    Note: Graph API message trace requires additional setup:\n"
