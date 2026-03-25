@@ -909,8 +909,8 @@ try {{
     }}
 
     # Sanitize string fields to remove control characters that break JSON parsing
-    # Pattern matches ASCII control chars (0x00-0x1F), DEL (0x7F), and C1 control codes (0x80-0x9F)
-    $controlCharPattern = '[\x00-\x1F\x7F\x80-\x9F]'
+    # Use Unicode escapes (not \\x hex) so Python f-strings don't mangle the pattern
+    $controlCharPattern = '[\\u0000-\\u001F\\u007F\\u0080-\\u009F]'
     $cleanTraces = @()
     foreach ($trace in $allTraces) {{
         $cleanTrace = [PSCustomObject]@{{
@@ -1436,8 +1436,8 @@ try {{
     }}
 
     # Sanitize string fields to remove control characters that break JSON parsing
-    # Pattern matches ASCII control chars (0x00-0x1F), DEL (0x7F), and C1 control codes (0x80-0x9F)
-    $controlCharPattern = '[\x00-\x1F\x7F\x80-\x9F]'
+    # Use Unicode escapes (not \\x hex) so Python f-strings don't mangle the pattern
+    $controlCharPattern = '[\\u0000-\\u001F\\u007F\\u0080-\\u009F]'
     $cleanTraces = @()
     foreach ($trace in $allTraces) {{
         $cleanTrace = [PSCustomObject]@{{
