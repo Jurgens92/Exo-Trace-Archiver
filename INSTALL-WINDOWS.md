@@ -159,7 +159,6 @@ C:\ExoTraceArchiver\
 ├── Install.ps1              # Installer (re-runnable)
 ├── Manage-Service.ps1       # Service management
 ├── GenerateCert.ps1         # Certificate generator
-├── start-server.ps1         # Service startup script (auto-generated)
 │
 ├── backend\
 │   ├── .env                 # Configuration (edit this!)

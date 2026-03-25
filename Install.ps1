@@ -459,37 +459,12 @@ if (-not $SkipServiceInstall) {
     # Remove existing service if it exists
     & $nssmExe remove $ServiceName confirm 2>$null
 
-    # Create the service startup script
-    $startupScript = Join-Path $InstallPath "start-server.ps1"
-    $startupContent = @"
-# Exo-Trace-Archiver Server Startup Script
-# This script is run by NSSM as a Windows service.
-# It starts both the Django web server and the built-in scheduler.
-
-Set-Location "$BackendDir"
-
-# Activate virtual environment
-`$env:VIRTUAL_ENV = "$VenvDir"
-`$env:PATH = "$VenvDir\Scripts;`$env:PATH"
-
-# Start the scheduler in a background job
-`$schedulerJob = Start-Job -ScriptBlock {
-    Set-Location "$BackendDir"
-    & "$venvPython" manage.py run_scheduler
-}
-
-# Run Django server (foreground - NSSM monitors this process)
-& "$venvPython" manage.py runserver 0.0.0.0:$Port --noreload
-
-# If Django stops, also stop the scheduler
-Stop-Job `$schedulerJob -ErrorAction SilentlyContinue
-"@
-    Set-Content -Path $startupScript -Value $startupContent
-    Write-Success "Startup script created."
-
     # Install the service using NSSM
+    # Point NSSM directly at the venv python.exe — no intermediate script needed.
+    # The built-in APScheduler starts automatically when Django starts (in AppConfig.ready),
+    # so a single process handles both the web server and scheduled pulls.
     Write-Info "Registering Windows service '$ServiceName'..."
-    & $nssmExe install $ServiceName "powershell.exe" "-ExecutionPolicy Bypass -File `"$startupScript`""
+    & $nssmExe install $ServiceName $venvPython "manage.py runserver 0.0.0.0:$Port --noreload"
 
     # Configure the service
     & $nssmExe set $ServiceName Description "Exo-Trace-Archiver - Exchange Online Message Trace Log Archiver"
