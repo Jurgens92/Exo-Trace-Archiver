@@ -62,6 +62,7 @@ $PythonVersion = "3.12.8"
 $NodeVersion = "20.18.1"
 $NssmVersion = "2.24"
 $NssmUrl = "https://nssm.cc/release/nssm-$NssmVersion.zip"
+$NssmFallbackUrl = "https://nssm.cc/ci/nssm-$NssmVersion-101-g897c7ad.zip"
 $PythonUrl = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-amd64.exe"
 $NodeUrl = "https://nodejs.org/dist/v$NodeVersion/node-v$NodeVersion-x64.msi"
 
@@ -111,8 +112,10 @@ if ($Uninstall) {
     Write-Step "Uninstalling Exo-Trace-Archiver"
 
     # Stop and remove service
-    $nssmExe = Join-Path $NssmDir "nssm-$NssmVersion\win64\nssm.exe"
-    if (Test-Path $nssmExe) {
+    $nssmExe = Get-ChildItem -Path $NssmDir -Filter "nssm.exe" -Recurse -ErrorAction SilentlyContinue |
+               Where-Object { $_.DirectoryName -like "*win64*" } |
+               Select-Object -First 1 -ExpandProperty FullName
+    if ($nssmExe) {
         Write-Info "Stopping service '$ServiceName'..."
         & $nssmExe stop $ServiceName 2>$null
         Start-Sleep -Seconds 2
@@ -311,7 +314,7 @@ if (-not (Test-Path $venvPython)) {
 }
 
 Write-Info "Installing Python dependencies..."
-& $venvPip install --upgrade pip --quiet
+& $venvPython -m pip install --upgrade pip --quiet 2>$null
 & $venvPip install -r (Join-Path $BackendDir "requirements.txt") --quiet
 Write-Success "Python dependencies installed."
 
@@ -328,7 +331,12 @@ try {
     Write-Success "Node.js dependencies installed."
 
     Write-Info "Building React frontend (this may take a minute)..."
-    npm run build 2>$null
+    npm run build
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "Frontend build failed. Check the TypeScript errors above."
+        Write-Host "  You can fix the errors and re-run the installer to retry." -ForegroundColor Yellow
+        exit 1
+    }
     Write-Success "Frontend built successfully."
 } finally {
     Pop-Location
@@ -394,15 +402,51 @@ if (-not $SkipServiceInstall) {
     Write-Step "Step 7: Setting up Windows service"
 
     # Download and extract NSSM
-    $nssmExe = Join-Path $NssmDir "nssm-$NssmVersion\win64\nssm.exe"
-    if (-not (Test-Path $nssmExe)) {
+    # Look for nssm.exe in any subfolder (version in folder name may vary)
+    $nssmExe = Get-ChildItem -Path $NssmDir -Filter "nssm.exe" -Recurse -ErrorAction SilentlyContinue |
+               Where-Object { $_.DirectoryName -like "*win64*" } |
+               Select-Object -First 1 -ExpandProperty FullName
+
+    if (-not $nssmExe) {
         Write-Info "Downloading NSSM (Non-Sucking Service Manager)..."
         $nssmZip = Join-Path $env:TEMP "nssm.zip"
-        Invoke-WebRequest -Uri $NssmUrl -OutFile $nssmZip
+        $downloaded = $false
+
+        # Try primary URL, then fallback
+        foreach ($url in @($NssmUrl, $NssmFallbackUrl)) {
+            try {
+                Write-Info "Trying $url..."
+                Invoke-WebRequest -Uri $url -OutFile $nssmZip -TimeoutSec 30
+                $downloaded = $true
+                break
+            } catch {
+                Write-Info "Download failed: $($_.Exception.Message)"
+            }
+        }
+
+        if (-not $downloaded) {
+            Write-Fail "Could not download NSSM. Please download manually from https://nssm.cc/"
+            Write-Host "  Extract it to: $NssmDir" -ForegroundColor Yellow
+            Write-Host "  Then re-run this installer." -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "  Alternatively, run with -SkipServiceInstall to install without a service." -ForegroundColor Yellow
+            exit 1
+        }
 
         Write-Info "Extracting NSSM..."
         Expand-Archive -Path $nssmZip -DestinationPath $NssmDir -Force
         Remove-Item $nssmZip -ErrorAction SilentlyContinue
+
+        # Find the extracted nssm.exe
+        $nssmExe = Get-ChildItem -Path $NssmDir -Filter "nssm.exe" -Recurse -ErrorAction SilentlyContinue |
+                   Where-Object { $_.DirectoryName -like "*win64*" } |
+                   Select-Object -First 1 -ExpandProperty FullName
+
+        if (-not $nssmExe) {
+            Write-Fail "NSSM extracted but nssm.exe not found in $NssmDir"
+            exit 1
+        }
+
         Write-Success "NSSM installed."
     } else {
         Write-Success "NSSM already installed."

@@ -148,8 +148,8 @@ export interface ConfigResponse {
     page_size: number
   }
   scheduler: {
-    daily_pull_hour: number
-    daily_pull_minute: number
+    pull_interval_hours: number
+    pull_interval_minutes: number
   }
   database: {
     engine: string
