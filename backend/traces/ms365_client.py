@@ -722,7 +722,6 @@ class PowerShellClient(BaseMS365Client):
 
     def _get_powershell_executable(self) -> str:
         """Determine the PowerShell executable to use."""
-        import platform
         import shutil
 
         # Prefer PowerShell 7 (pwsh) over Windows PowerShell
@@ -734,22 +733,6 @@ class PowerShellClient(BaseMS365Client):
         if powershell:
             return powershell
 
-        system = platform.system().lower()
-        if system == 'linux':
-            raise MS365APIError(
-                "PowerShell is not installed on this Linux system. "
-                "To fix this, either:\n"
-                "  1. Switch your tenant's API method to 'graph' (Microsoft Graph API) in "
-                "the Tenants settings page — this is the recommended method and does not "
-                "require PowerShell.\n"
-                "  2. Or install PowerShell 7 and the Exchange module on Ubuntu:\n"
-                "     curl -fsSL https://packages.microsoft.com/config/ubuntu/"
-                "$(lsb_release -rs)/packages-microsoft-prod.deb -o /tmp/packages-microsoft-prod.deb\n"
-                "     sudo dpkg -i /tmp/packages-microsoft-prod.deb\n"
-                "     sudo apt-get update && sudo apt-get install -y powershell\n"
-                "     sudo pwsh -Command 'Install-Module PSWSMan -Force; Install-WSMan'\n"
-                "     pwsh -Command 'Install-Module ExchangeOnlineManagement -Force'"
-            )
         raise MS365APIError(
             "PowerShell not found. Install PowerShell 7: "
             "https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell"
@@ -870,14 +853,29 @@ try {{
             $currentEnd = $endDate
         }}
 
-        $traces = Get-MessageTraceV2 `
-            -StartDate $currentStart `
-            -EndDate $currentEnd `
-            -ResultSize $resultSize `
-            -ErrorAction Stop `
-            -WarningAction SilentlyContinue |
-            Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
-                Subject, Status, ToIP, FromIP, Size, MessageTraceId
+        # Retry logic for transient "Query failed" errors from Exchange Online
+        $maxRetries = 3
+        $retryDelay = 5
+        $traces = $null
+        for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {{
+            try {{
+                $traces = Get-MessageTraceV2 `
+                    -StartDate $currentStart `
+                    -EndDate $currentEnd `
+                    -ResultSize $resultSize `
+                    -ErrorAction Stop `
+                    -WarningAction SilentlyContinue |
+                    Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
+                        Subject, Status, ToIP, FromIP, Size, MessageTraceId
+                break
+            }}
+            catch {{
+                if ($attempt -eq $maxRetries) {{
+                    throw
+                }}
+                Start-Sleep -Seconds ($retryDelay * $attempt)
+            }}
+        }}
 
         if ($traces) {{
             if ($traces -isnot [Array]) {{
@@ -1020,27 +1018,6 @@ def get_ms365_client_for_tenant(tenant) -> 'TenantGraphAPIClient | TenantPowerSh
         logger.info(f"Using Microsoft Graph API client for tenant: {tenant.name}")
         return TenantGraphAPIClient(tenant)
     else:
-        # Check for PowerShell availability; raise clear error if not installed
-        import shutil
-        if not shutil.which('pwsh') and not shutil.which('powershell'):
-            logger.warning(
-                f"Tenant '{tenant.name}' is configured to use PowerShell, but PowerShell "
-                f"is not installed on this system."
-            )
-            raise MS365APIError(
-                f"Tenant '{tenant.name}' is configured to use Exchange Online PowerShell, "
-                f"but PowerShell (pwsh) is not installed on this system.\n"
-                f"To fix this, choose one of:\n"
-                f"  Option A - Install PowerShell on Ubuntu:\n"
-                f"    sudo apt-get update && sudo apt-get install -y powershell\n"
-                f"    sudo pwsh -Command 'Install-Module PSWSMan -Force; Install-WSMan'\n"
-                f"    pwsh -Command 'Install-Module ExchangeOnlineManagement -Force'\n"
-                f"  Option B - Switch this tenant's API method to 'graph' in the Tenants page.\n"
-                f"    Note: Graph API message trace requires additional setup:\n"
-                f"    Connect-MgGraph -Scopes Application.ReadWrite.All\n"
-                f"    New-MgServicePrincipal -AppId '8bd644d1-64a1-4d4b-ae52-2e0cbf64e373'\n"
-                f"    Then add ExchangeMessageTrace.Read.All permission and grant admin consent."
-            )
         logger.info(f"Using Exchange Online PowerShell client for tenant: {tenant.name}")
         return TenantPowerShellClient(tenant)
 
@@ -1385,14 +1362,29 @@ try {{
             $currentEnd = $endDate
         }}
 
-        $traces = Get-MessageTraceV2 `
-            -StartDate $currentStart `
-            -EndDate $currentEnd `
-            -ResultSize $resultSize `
-            -ErrorAction Stop `
-            -WarningAction SilentlyContinue |
-            Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
-                Subject, Status, ToIP, FromIP, Size, MessageTraceId
+        # Retry logic for transient "Query failed" errors from Exchange Online
+        $maxRetries = 3
+        $retryDelay = 5
+        $traces = $null
+        for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {{
+            try {{
+                $traces = Get-MessageTraceV2 `
+                    -StartDate $currentStart `
+                    -EndDate $currentEnd `
+                    -ResultSize $resultSize `
+                    -ErrorAction Stop `
+                    -WarningAction SilentlyContinue |
+                    Select-Object MessageId, Received, SenderAddress, RecipientAddress, `
+                        Subject, Status, ToIP, FromIP, Size, MessageTraceId
+                break
+            }}
+            catch {{
+                if ($attempt -eq $maxRetries) {{
+                    throw
+                }}
+                Start-Sleep -Seconds ($retryDelay * $attempt)
+            }}
+        }}
 
         if ($traces) {{
             if ($traces -isnot [Array]) {{
