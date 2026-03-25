@@ -798,7 +798,23 @@ class PowerShellClient(BaseMS365Client):
         auth_method = settings.MS365_AUTH_METHOD
 
         if auth_method == 'certificate':
+            # On Windows, ensure the certificate is in the local machine cert store
+            cert_import_cmd = ''
+            legacy_cert_path = getattr(settings, 'MS365_CERTIFICATE_PATH', '')
+            legacy_cert_password = getattr(settings, 'MS365_CERTIFICATE_PASSWORD', '') or ''
+            if legacy_cert_path:
+                ps_pwd = legacy_cert_password.replace("'", "''")
+                cert_import_cmd = f'''
+$thumbprint = "{settings.MS365_CERTIFICATE_THUMBPRINT}"
+$existingCert = Get-ChildItem -Path Cert:\\LocalMachine\\My -ErrorAction SilentlyContinue | Where-Object {{ $_.Thumbprint -eq $thumbprint }}
+if (-not $existingCert) {{
+    $certPassword = ConvertTo-SecureString -String '{ps_pwd}' -AsPlainText -Force
+    Import-PfxCertificate -FilePath '{legacy_cert_path}' -CertStoreLocation Cert:\\LocalMachine\\My -Password $certPassword -Exportable | Out-Null
+}}
+'''
+
             connect_cmd = f'''
+{cert_import_cmd}
 Connect-ExchangeOnline `
     -CertificateThumbprint "{settings.MS365_CERTIFICATE_THUMBPRINT}" `
     -AppId "{self.client_id}" `
@@ -1311,7 +1327,25 @@ class TenantPowerShellClient(PowerShellClient):
         ps_page_size = min(page_size, 5000)
 
         if self.tenant.auth_method == 'certificate':
+            # On Windows, ensure the certificate is imported into the local machine
+            # cert store so Connect-ExchangeOnline can find it by thumbprint
+            cert_import_cmd = ''
+            cert_path = self.tenant.certificate_path
+            cert_password = self.tenant.certificate_password or ''
+            if cert_path:
+                ps_cert_password = cert_password.replace("'", "''")
+                cert_import_cmd = f'''
+# Import certificate into Windows cert store if not already present
+$thumbprint = "{self.tenant.certificate_thumbprint}"
+$existingCert = Get-ChildItem -Path Cert:\\LocalMachine\\My -ErrorAction SilentlyContinue | Where-Object {{ $_.Thumbprint -eq $thumbprint }}
+if (-not $existingCert) {{
+    $certPassword = ConvertTo-SecureString -String '{ps_cert_password}' -AsPlainText -Force
+    Import-PfxCertificate -FilePath '{cert_path}' -CertStoreLocation Cert:\\LocalMachine\\My -Password $certPassword -Exportable | Out-Null
+}}
+'''
+
             connect_cmd = f'''
+{cert_import_cmd}
 Connect-ExchangeOnline `
     -CertificateThumbprint "{self.tenant.certificate_thumbprint}" `
     -AppId "{self.client_id}" `
