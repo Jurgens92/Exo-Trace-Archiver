@@ -280,7 +280,7 @@ if ($exoModule) {
         Write-Success "ExchangeOnlineManagement module installed: v$($exoModule.Version)"
     } else {
         Write-Info "Could not install ExchangeOnlineManagement module."
-        Write-Host "  This is optional — Graph API method works without it." -ForegroundColor Gray
+        Write-Host "  This is optional - Graph API method works without it." -ForegroundColor Gray
         Write-Host "  To install manually later: Install-Module -Name ExchangeOnlineManagement -Force" -ForegroundColor Gray
     }
 }
@@ -392,7 +392,7 @@ if (-not (Test-Path $envFile)) {
     }
 
     # Generate a random SECRET_KEY
-    $chars = "abcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*(-_=+)"
+    $chars = 'abcdefghijklmnopqrstuvwxyz0123456789_-=+'
     $secretKey = -join ((1..50) | ForEach-Object { $chars[(Get-Random -Maximum $chars.Length)] })
 
     # Update .env with production values
@@ -512,7 +512,7 @@ if (-not $SkipServiceInstall) {
         Write-Success "NSSM already installed."
     }
 
-    # Stop existing service if running (may not exist yet — that's OK)
+    # Stop existing service if running (may not exist yet - that is OK)
     $ErrorActionPreference = "Continue"
     & $nssmExe stop $ServiceName 2>$null
     Start-Sleep -Seconds 1
@@ -521,7 +521,7 @@ if (-not $SkipServiceInstall) {
     & $nssmExe remove $ServiceName confirm 2>$null
 
     # Install the service using NSSM
-    # Point NSSM directly at the venv python.exe — no intermediate script needed.
+    # Point NSSM directly at the venv python.exe - no intermediate script needed.
     # The built-in APScheduler starts automatically when Django starts (in AppConfig.ready),
     # so a single process handles both the web server and scheduled pulls.
     Write-Info "Registering Windows service '$ServiceName'..."
