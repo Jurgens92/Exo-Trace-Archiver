@@ -366,6 +366,9 @@ if (-not (Test-Path $envFile)) {
     $envContent = $envContent -replace "DEBUG=.*", "DEBUG=False"
     $envContent = $envContent -replace "ALLOWED_HOSTS=.*", "ALLOWED_HOSTS=localhost,127.0.0.1,$env:COMPUTERNAME"
     $envContent = $envContent -replace "CORS_ALLOWED_ORIGINS=.*", "CORS_ALLOWED_ORIGINS=http://localhost:$Port,http://127.0.0.1:$Port"
+    # Use absolute path for SQLite database to avoid working directory issues
+    $dbPath = (Join-Path $BackendDir "db.sqlite3") -replace '\\', '/'
+    $envContent = $envContent -replace "DATABASE_URL=.*", "DATABASE_URL=sqlite:///$dbPath"
     Set-Content $envFile $envContent
     Write-Success ".env configured with production defaults."
     Write-Info "IMPORTANT: Edit $envFile to add your Microsoft 365 credentials."
