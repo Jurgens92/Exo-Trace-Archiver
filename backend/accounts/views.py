@@ -10,6 +10,8 @@ Provides endpoints for:
 """
 
 import os
+import platform
+import subprocess
 import uuid
 import hashlib
 from pathlib import Path
@@ -551,11 +553,21 @@ class CertificateUploadView(views.APIView):
                 # Thumbprint calculation is optional - don't fail the upload
                 pass
 
+            # On Windows, import PFX into the local machine certificate store
+            # so that PowerShell's Connect-ExchangeOnline can find it by thumbprint
+            cert_store_imported = False
+            if platform.system() == 'Windows' and file_ext in ['.pfx', '.p12']:
+                cert_password = request.data.get('certificate_password', '')
+                cert_store_imported = self._import_to_windows_cert_store(
+                    cert_path, cert_password
+                )
+
             return Response({
                 'certificate_path': str(cert_path),
                 'certificate_thumbprint': thumbprint,
                 'filename': safe_name,
                 'size': cert_file.size,
+                'certificate_store_imported': cert_store_imported,
             }, status=status.HTTP_201_CREATED)
 
         except IOError as e:
@@ -623,6 +635,51 @@ class CertificateUploadView(views.APIView):
             return None
 
         return None
+
+    def _import_to_windows_cert_store(self, cert_path: Path, password: str = '') -> bool:
+        """
+        Import a PFX certificate into the Windows local machine certificate store.
+
+        This is required for PowerShell's Connect-ExchangeOnline to find the
+        certificate by thumbprint. Only runs on Windows.
+        """
+        logger = logging.getLogger('traces')
+        try:
+            # Use PowerShell to import the certificate into LocalMachine\My store
+            ps_password = password.replace("'", "''") if password else ''
+            ps_script = (
+                f"$password = ConvertTo-SecureString -String '{ps_password}' "
+                f"-AsPlainText -Force; "
+                f"Import-PfxCertificate "
+                f"-FilePath '{cert_path}' "
+                f"-CertStoreLocation Cert:\\LocalMachine\\My "
+                f"-Password $password "
+                f"-Exportable"
+            )
+
+            result = subprocess.run(
+                ['powershell.exe', '-NoProfile', '-Command', ps_script],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+            if result.returncode == 0:
+                logger.info(
+                    f"Certificate imported to Windows cert store: {cert_path.name}"
+                )
+                return True
+            else:
+                logger.warning(
+                    f"Failed to import certificate to Windows cert store: "
+                    f"{result.stderr.strip()}"
+                )
+                return False
+        except Exception as e:
+            logger.warning(
+                f"Could not import certificate to Windows cert store: {e}"
+            )
+            return False
 
 
 class AppSettingsView(views.APIView):
