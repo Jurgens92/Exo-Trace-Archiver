@@ -8,8 +8,8 @@ export interface AppSettings {
   domain_discovery_auto_refresh: boolean
   domain_discovery_refresh_hours: number
   scheduled_pull_enabled: boolean
-  scheduled_pull_hour: number
-  scheduled_pull_minute: number
+  scheduled_pull_interval_hours: number
+  scheduled_pull_interval_minutes: number
   updated_at: string
   updated_by_username: string | null
 }
@@ -18,8 +18,8 @@ export interface UpdateAppSettingsRequest {
   domain_discovery_auto_refresh?: boolean
   domain_discovery_refresh_hours?: number
   scheduled_pull_enabled?: boolean
-  scheduled_pull_hour?: number
-  scheduled_pull_minute?: number
+  scheduled_pull_interval_hours?: number
+  scheduled_pull_interval_minutes?: number
 }
 
 export interface UpdateAppSettingsResponse {

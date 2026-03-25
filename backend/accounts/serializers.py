@@ -516,8 +516,8 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             'domain_discovery_auto_refresh',
             'domain_discovery_refresh_hours',
             'scheduled_pull_enabled',
-            'scheduled_pull_hour',
-            'scheduled_pull_minute',
+            'scheduled_pull_interval_hours',
+            'scheduled_pull_interval_minutes',
             'updated_at',
             'updated_by_username',
         ]
@@ -531,14 +531,24 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             )
         return value
 
-    def validate_scheduled_pull_hour(self, value):
-        """Validate hour is 0-23."""
-        if value < 0 or value > 23:
-            raise serializers.ValidationError("Hour must be between 0 and 23")
+    def validate_scheduled_pull_interval_hours(self, value):
+        """Validate interval hours is 0-168."""
+        if value < 0 or value > 168:
+            raise serializers.ValidationError("Interval hours must be between 0 and 168")
         return value
 
-    def validate_scheduled_pull_minute(self, value):
-        """Validate minute is 0-59."""
+    def validate_scheduled_pull_interval_minutes(self, value):
+        """Validate interval minutes is 0-59."""
         if value < 0 or value > 59:
-            raise serializers.ValidationError("Minute must be between 0 and 59")
+            raise serializers.ValidationError("Interval minutes must be between 0 and 59")
         return value
+
+    def validate(self, data):
+        """Validate that the total interval is at least 1 minute."""
+        hours = data.get('scheduled_pull_interval_hours', getattr(self.instance, 'scheduled_pull_interval_hours', 24) if self.instance else 24)
+        minutes = data.get('scheduled_pull_interval_minutes', getattr(self.instance, 'scheduled_pull_interval_minutes', 0) if self.instance else 0)
+        if hours == 0 and minutes == 0:
+            raise serializers.ValidationError(
+                "Pull interval must be at least 1 minute."
+            )
+        return data

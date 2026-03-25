@@ -382,15 +382,15 @@ class AppSettings(models.Model):
         default=True,
         help_text="Enable automated scheduled trace pulls"
     )
-    scheduled_pull_hour = models.IntegerField(
-        default=1,
-        validators=[MinValueValidator(0), MaxValueValidator(23)],
-        help_text="Hour of day to run scheduled pulls (0-23, UTC)"
+    scheduled_pull_interval_hours = models.IntegerField(
+        default=24,
+        validators=[MinValueValidator(0), MaxValueValidator(168)],
+        help_text="Hours component of the pull interval (0-168)"
     )
-    scheduled_pull_minute = models.IntegerField(
+    scheduled_pull_interval_minutes = models.IntegerField(
         default=0,
         validators=[MinValueValidator(0), MaxValueValidator(59)],
-        help_text="Minute of hour to run scheduled pulls (0-59)"
+        help_text="Minutes component of the pull interval (0-59)"
     )
 
     # Metadata

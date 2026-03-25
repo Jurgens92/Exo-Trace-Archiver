@@ -46,8 +46,8 @@ export function SettingsPage() {
         localSettings.domain_discovery_auto_refresh !== appSettings.domain_discovery_auto_refresh ||
         localSettings.domain_discovery_refresh_hours !== appSettings.domain_discovery_refresh_hours ||
         localSettings.scheduled_pull_enabled !== appSettings.scheduled_pull_enabled ||
-        localSettings.scheduled_pull_hour !== appSettings.scheduled_pull_hour ||
-        localSettings.scheduled_pull_minute !== appSettings.scheduled_pull_minute
+        localSettings.scheduled_pull_interval_hours !== appSettings.scheduled_pull_interval_hours ||
+        localSettings.scheduled_pull_interval_minutes !== appSettings.scheduled_pull_interval_minutes
       setHasChanges(changed)
     }
   }, [localSettings, appSettings])
@@ -85,8 +85,8 @@ export function SettingsPage() {
         domain_discovery_auto_refresh: localSettings.domain_discovery_auto_refresh,
         domain_discovery_refresh_hours: localSettings.domain_discovery_refresh_hours,
         scheduled_pull_enabled: localSettings.scheduled_pull_enabled,
-        scheduled_pull_hour: localSettings.scheduled_pull_hour,
-        scheduled_pull_minute: localSettings.scheduled_pull_minute,
+        scheduled_pull_interval_hours: localSettings.scheduled_pull_interval_hours,
+        scheduled_pull_interval_minutes: localSettings.scheduled_pull_interval_minutes,
       })
       toast({
         title: 'Settings saved',
@@ -250,53 +250,53 @@ export function SettingsPage() {
                         Enable scheduled pulls
                       </span>
                       <p className="text-sm text-muted-foreground mt-0.5">
-                        Automatically pull message traces at a scheduled time each day
+                        Automatically pull message traces at a regular interval
                       </p>
                     </div>
                   </label>
 
                   <div className="space-y-2">
                     <label className="block">
-                      <span className="text-sm font-medium">Pull Schedule (UTC)</span>
+                      <span className="text-sm font-medium">Pull Interval</span>
                       <div className="flex items-center gap-3 mt-1.5">
                         <input
                           type="number"
                           min="0"
-                          max="23"
-                          value={localSettings.scheduled_pull_hour}
+                          max="168"
+                          value={localSettings.scheduled_pull_interval_hours}
                           onChange={(e) => {
-                            const value = Math.min(23, Math.max(0, parseInt(e.target.value) || 0))
+                            const value = Math.min(168, Math.max(0, parseInt(e.target.value) || 0))
                             setLocalSettings({
                               ...localSettings,
-                              scheduled_pull_hour: value,
+                              scheduled_pull_interval_hours: value,
                             })
                           }}
                           className="w-20 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-center"
                           disabled={!localSettings.scheduled_pull_enabled}
                         />
-                        <span className="text-muted-foreground">:</span>
+                        <span className="text-sm text-muted-foreground">hours</span>
                         <input
                           type="number"
                           min="0"
                           max="59"
-                          value={localSettings.scheduled_pull_minute}
+                          value={localSettings.scheduled_pull_interval_minutes}
                           onChange={(e) => {
                             const value = Math.min(59, Math.max(0, parseInt(e.target.value) || 0))
                             setLocalSettings({
                               ...localSettings,
-                              scheduled_pull_minute: value,
+                              scheduled_pull_interval_minutes: value,
                             })
                           }}
                           className="w-20 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-center"
                           disabled={!localSettings.scheduled_pull_enabled}
                         />
-                        <span className="text-sm text-muted-foreground font-mono">
-                          {String(localSettings.scheduled_pull_hour).padStart(2, '0')}:
-                          {String(localSettings.scheduled_pull_minute).padStart(2, '0')} UTC
-                        </span>
+                        <span className="text-sm text-muted-foreground">minutes</span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1.5">
-                        Time of day to run automated pulls (in UTC timezone)
+                      <p className="text-sm text-muted-foreground font-mono mt-1.5">
+                        Every {localSettings.scheduled_pull_interval_hours}h {String(localSettings.scheduled_pull_interval_minutes).padStart(2, '0')}m
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        How often to automatically pull message traces. Default: every 24 hours.
                       </p>
                     </label>
                   </div>
@@ -494,8 +494,8 @@ export function SettingsPage() {
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <ConfigItem
-              label="Daily Pull Time (UTC)"
-              value={`${config.scheduler.daily_pull_hour.toString().padStart(2, '0')}:${config.scheduler.daily_pull_minute.toString().padStart(2, '0')}`}
+              label="Pull Interval"
+              value={`Every ${config.scheduler.pull_interval_hours}h ${config.scheduler.pull_interval_minutes.toString().padStart(2, '0')}m`}
             />
             <ConfigItem
               label="Database Engine"
