@@ -474,7 +474,8 @@ if (-not $SkipServiceInstall) {
         Write-Success "NSSM already installed."
     }
 
-    # Stop existing service if running
+    # Stop existing service if running (may not exist yet — that's OK)
+    $ErrorActionPreference = "Continue"
     & $nssmExe stop $ServiceName 2>$null
     Start-Sleep -Seconds 1
 
@@ -500,6 +501,7 @@ if (-not $SkipServiceInstall) {
     & $nssmExe set $ServiceName AppStopMethodConsole 5000
     & $nssmExe set $ServiceName AppStopMethodWindow 5000
     & $nssmExe set $ServiceName AppStopMethodThreads 5000
+    $ErrorActionPreference = "Stop"
 
     Write-Success "Windows service '$ServiceName' registered."
 
