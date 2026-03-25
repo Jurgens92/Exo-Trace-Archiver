@@ -57,6 +57,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Serve static files efficiently
     'corsheaders.middleware.CorsMiddleware',  # Must be before CommonMiddleware
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -120,6 +121,19 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Frontend build directory (React production build served by Django)
+FRONTEND_DIR = BASE_DIR.parent / 'frontend' / 'dist'
+STATICFILES_DIRS = []
+if FRONTEND_DIR.exists():
+    STATICFILES_DIRS.append(FRONTEND_DIR)
+
+# WhiteNoise configuration for efficient static file serving
+STORAGES = {
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # Media files (uploaded files like certificates)
 MEDIA_URL = 'media/'
