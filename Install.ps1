@@ -251,10 +251,45 @@ if (Test-CommandExists "node") {
 }
 
 # ============================================================================
-# Step 3: Copy Application Files
+# Step 3: Install Exchange Online Management PowerShell Module
 # ============================================================================
 
-Write-Step "Step 3: Setting up application directory"
+Write-Step "Step 3: Checking Exchange Online Management module"
+
+$ErrorActionPreference = "Continue"
+$exoModule = Get-Module -ListAvailable -Name ExchangeOnlineManagement 2>$null
+$ErrorActionPreference = "Stop"
+
+if ($exoModule) {
+    Write-Success "ExchangeOnlineManagement module found: v$($exoModule.Version)"
+} else {
+    Write-Info "Installing ExchangeOnlineManagement PowerShell module..."
+    Write-Info "(Required for PowerShell API method; optional if using Graph API)"
+    $ErrorActionPreference = "Continue"
+    Install-Module -Name ExchangeOnlineManagement -Force -Scope AllUsers -AllowClobber 2>&1 | ForEach-Object {
+        if ($_ -is [System.Management.Automation.ErrorRecord]) {
+            # Suppress NuGet provider prompts written to stderr
+        } else {
+            Write-Host "  $_"
+        }
+    }
+    $ErrorActionPreference = "Stop"
+
+    $exoModule = Get-Module -ListAvailable -Name ExchangeOnlineManagement -ErrorAction SilentlyContinue
+    if ($exoModule) {
+        Write-Success "ExchangeOnlineManagement module installed: v$($exoModule.Version)"
+    } else {
+        Write-Info "Could not install ExchangeOnlineManagement module."
+        Write-Host "  This is optional — Graph API method works without it." -ForegroundColor Gray
+        Write-Host "  To install manually later: Install-Module -Name ExchangeOnlineManagement -Force" -ForegroundColor Gray
+    }
+}
+
+# ============================================================================
+# Step 4: Copy Application Files
+# ============================================================================
+
+Write-Step "Step 4: Setting up application directory"
 
 if (-not (Test-Path $InstallPath)) {
     New-Item -ItemType Directory -Force -Path $InstallPath | Out-Null
@@ -297,10 +332,10 @@ if ($scriptDir -ne $InstallPath) {
 }
 
 # ============================================================================
-# Step 4: Set up Python Virtual Environment
+# Step 5: Set up Python Virtual Environment
 # ============================================================================
 
-Write-Step "Step 4: Setting up Python virtual environment"
+Write-Step "Step 5: Setting up Python virtual environment"
 
 $venvPython = Join-Path $VenvDir "Scripts\python.exe"
 $venvPip = Join-Path $VenvDir "Scripts\pip.exe"
@@ -319,10 +354,10 @@ Write-Info "Installing Python dependencies..."
 Write-Success "Python dependencies installed."
 
 # ============================================================================
-# Step 5: Build Frontend
+# Step 6: Build Frontend
 # ============================================================================
 
-Write-Step "Step 5: Building frontend"
+Write-Step "Step 6: Building frontend"
 
 Push-Location $FrontendDir
 try {
@@ -343,10 +378,10 @@ try {
 }
 
 # ============================================================================
-# Step 6: Configure Django
+# Step 7: Configure Django
 # ============================================================================
 
-Write-Step "Step 6: Configuring Django"
+Write-Step "Step 7: Configuring Django"
 
 $envFile = Join-Path $BackendDir ".env"
 if (-not (Test-Path $envFile)) {
@@ -420,11 +455,11 @@ if ($userCheck -ne "True") {
 }
 
 # ============================================================================
-# Step 7: Install NSSM and Register Windows Service
+# Step 8: Install NSSM and Register Windows Service
 # ============================================================================
 
 if (-not $SkipServiceInstall) {
-    Write-Step "Step 7: Setting up Windows service"
+    Write-Step "Step 8: Setting up Windows service"
 
     # Download and extract NSSM
     # Look for nssm.exe in any subfolder (version in folder name may vary)
@@ -517,7 +552,7 @@ if (-not $SkipServiceInstall) {
     Write-Success "Firewall rule added (Domain and Private networks)."
 
 } else {
-    Write-Step "Step 7: Skipping service installation (--SkipServiceInstall)"
+    Write-Step "Step 8: Skipping service installation (--SkipServiceInstall)"
 }
 
 # ============================================================================
