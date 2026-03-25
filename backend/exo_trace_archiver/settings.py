@@ -264,6 +264,6 @@ LOGGING = {
 (BASE_DIR / 'logs').mkdir(exist_ok=True)
 
 # Scheduled task configuration
-# The daily pull runs at 01:00 UTC to get yesterday's message traces
-DAILY_PULL_HOUR = env.int('DAILY_PULL_HOUR', default=1)
-DAILY_PULL_MINUTE = env.int('DAILY_PULL_MINUTE', default=0)
+# Default pull interval (used as fallback if DB settings unavailable)
+PULL_INTERVAL_HOURS = env.int('PULL_INTERVAL_HOURS', default=24)
+PULL_INTERVAL_MINUTES = env.int('PULL_INTERVAL_MINUTES', default=0)

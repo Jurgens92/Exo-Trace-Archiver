@@ -561,8 +561,8 @@ class ConfigView(views.APIView):
                 'page_size': getattr(settings, 'MESSAGE_TRACE_PAGE_SIZE', 1000),
             },
             'scheduler': {
-                'daily_pull_hour': getattr(settings, 'DAILY_PULL_HOUR', 1),
-                'daily_pull_minute': getattr(settings, 'DAILY_PULL_MINUTE', 0),
+                'pull_interval_hours': getattr(settings, 'PULL_INTERVAL_HOURS', 24),
+                'pull_interval_minutes': getattr(settings, 'PULL_INTERVAL_MINUTES', 0),
             },
             'database': {
                 'engine': settings.DATABASES['default']['ENGINE'].split('.')[-1],

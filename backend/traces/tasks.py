@@ -154,16 +154,14 @@ def pull_message_traces_for_tenant(
     Returns:
         Dictionary with pull results
     """
-    # Set default date range (yesterday)
+    # Set default date range (yesterday 00:00 to now)
     now = timezone.now()
     if start_date is None:
         start_date = (now - timedelta(days=1)).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
     if end_date is None:
-        end_date = (now - timedelta(days=1)).replace(
-            hour=23, minute=59, second=59, microsecond=999999
-        )
+        end_date = now
 
     # Ensure dates are timezone-aware
     if start_date.tzinfo is None:
@@ -510,9 +508,7 @@ def pull_message_traces(
             hour=0, minute=0, second=0, microsecond=0
         )
     if end_date is None:
-        end_date = (now - timedelta(days=1)).replace(
-            hour=23, minute=59, second=59, microsecond=999999
-        )
+        end_date = now
 
     # Ensure dates are timezone-aware
     if start_date.tzinfo is None:

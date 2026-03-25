@@ -8,8 +8,10 @@ class TracesConfig(AppConfig):
 
     def ready(self):
         """
-        Initialize the app - this is called once when Django starts.
-        We could start the scheduler here, but for production it's better
-        to run the scheduler as a separate process or use celery.
+        Start the background scheduler when Django starts.
+
+        The scheduler runs in a daemon thread alongside the server,
+        so there's no need to run a separate process.
         """
-        pass
+        from .scheduler import start_scheduler
+        start_scheduler()
