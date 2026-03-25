@@ -825,7 +825,7 @@ class ConfigViewTest(BaseTraceAPITestCase):
 # Scheduler Command Tests
 # ---------------------------------------------------------------------------
 
-class RunSchedulerCommandTest(TestCase):
+class SchedulerTest(TestCase):
     def test_get_interval_from_settings(self):
         """Test that scheduler reads interval from DB settings."""
         settings = AppSettings.get_settings()
@@ -833,9 +833,8 @@ class RunSchedulerCommandTest(TestCase):
         settings.scheduled_pull_interval_minutes = 15
         settings.save()
 
-        from traces.management.commands.run_scheduler import Command
-        cmd = Command()
-        hours, minutes, enabled = cmd._get_interval_from_settings()
+        from traces.scheduler import get_interval_from_settings
+        hours, minutes, enabled = get_interval_from_settings()
         self.assertEqual(hours, 6)
         self.assertEqual(minutes, 15)
         self.assertTrue(enabled)
@@ -845,16 +844,47 @@ class RunSchedulerCommandTest(TestCase):
         settings.scheduled_pull_enabled = False
         settings.save()
 
-        from traces.management.commands.run_scheduler import Command
-        cmd = Command()
-        _, _, enabled = cmd._get_interval_from_settings()
+        from traces.scheduler import get_interval_from_settings
+        _, _, enabled = get_interval_from_settings()
         self.assertFalse(enabled)
 
     def test_get_interval_defaults(self):
         """Test default values when no settings exist yet."""
-        from traces.management.commands.run_scheduler import Command
-        cmd = Command()
-        hours, minutes, enabled = cmd._get_interval_from_settings()
+        from traces.scheduler import get_interval_from_settings
+        hours, minutes, enabled = get_interval_from_settings()
         self.assertEqual(hours, 24)
         self.assertEqual(minutes, 0)
         self.assertTrue(enabled)
+
+    @patch('traces.tasks.pull_all_tenants')
+    def test_run_pull_task_skips_when_disabled(self, mock_pull):
+        """Test that pull is skipped when disabled in settings."""
+        settings = AppSettings.get_settings()
+        settings.scheduled_pull_enabled = False
+        settings.save()
+
+        from traces.scheduler import _run_pull_task
+        _run_pull_task()
+        mock_pull.assert_not_called()
+
+    @patch('traces.tasks.pull_all_tenants')
+    def test_run_pull_task_calls_pull_all_tenants(self, mock_pull):
+        """Test that pull task calls pull_all_tenants when enabled."""
+        settings = AppSettings.get_settings()
+        settings.scheduled_pull_enabled = True
+        settings.save()
+
+        mock_pull.return_value = [{
+            'status': 'Success',
+            'records_pulled': 10,
+            'records_new': 8,
+            'records_updated': 2,
+            'tenant_name': 'Test',
+        }]
+
+        from traces.scheduler import _run_pull_task
+        _run_pull_task()
+        mock_pull.assert_called_once_with(
+            triggered_by='scheduler',
+            trigger_type='Scheduled'
+        )

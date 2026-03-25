@@ -1,22 +1,14 @@
 """
-Management command to run the scheduled task scheduler.
+Management command to run the scheduler as a standalone blocking process.
 
-This command starts an in-process scheduler that runs the message trace
-pull task at a configurable interval (default: every 24 hours).
-
-The scheduler reads its configuration from the database (AppSettings)
-and dynamically reschedules when settings change.
+In most cases you don't need this - the scheduler starts automatically
+with the Django server (runserver). This command is useful for production
+deployments where you want to run the scheduler as a separate service
+(e.g., systemd, Docker container).
 
 Usage:
     python manage.py run_scheduler
-
-For production deployments, consider:
-1. Running as a systemd service
-2. Using Celery Beat for more robust scheduling
-3. Using cron with the pull_traces command directly
-
-The scheduler uses APScheduler for simplicity and reliability.
-It's suitable for single-instance deployments.
+    python manage.py run_scheduler --run-now
 """
 
 import signal
@@ -28,13 +20,13 @@ from django.core.management.base import BaseCommand
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from traces.tasks import pull_all_tenants
+from traces.scheduler import get_interval_from_settings, _run_pull_task, _check_settings_change
 
 logger = logging.getLogger('traces')
 
 
 class Command(BaseCommand):
-    help = 'Run the scheduled task scheduler for message trace pulls'
+    help = 'Run the scheduled task scheduler as a standalone blocking process'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -47,39 +39,24 @@ class Command(BaseCommand):
             help='Run the pull task immediately in addition to scheduling'
         )
 
-    def _get_interval_from_settings(self):
-        """Read pull interval from database AppSettings."""
-        from accounts.models import AppSettings
-        try:
-            app_settings = AppSettings.get_settings()
-            hours = app_settings.scheduled_pull_interval_hours
-            minutes = app_settings.scheduled_pull_interval_minutes
-            enabled = app_settings.scheduled_pull_enabled
-        except Exception as e:
-            logger.warning(f"Could not load AppSettings, using defaults: {e}")
-            hours = 24
-            minutes = 0
-            enabled = True
-        return hours, minutes, enabled
-
     def handle(self, *args, **options):
-        self.stdout.write("Starting Exo-Trace-Archiver scheduler...")
+        self.stdout.write("Starting Exo-Trace-Archiver scheduler (standalone mode)...")
 
-        # Create scheduler
+        # Create blocking scheduler (not background)
         self.scheduler = BlockingScheduler(timezone='UTC')
 
         # Read interval from database settings
-        hours, minutes, enabled = self._get_interval_from_settings()
+        hours, minutes, enabled = get_interval_from_settings()
 
         if not enabled:
             self.stdout.write(self.style.WARNING(
                 "Scheduled pulls are disabled in settings. "
-                "Scheduler will start but check periodically for re-enablement."
+                "Scheduler will start but skip pulls until re-enabled."
             ))
 
         # Schedule the pull task with interval trigger
         self.scheduler.add_job(
-            self._run_pull_task,
+            _run_pull_task,
             trigger=IntervalTrigger(hours=hours, minutes=minutes),
             id='message_trace_pull',
             name='Message Trace Pull',
@@ -92,7 +69,7 @@ class Command(BaseCommand):
 
         # Add a job to check for settings changes every 5 minutes
         self.scheduler.add_job(
-            self._check_settings_change,
+            _check_settings_change,
             trigger=IntervalTrigger(minutes=5),
             id='settings_check',
             name='Settings Change Check',
@@ -102,7 +79,7 @@ class Command(BaseCommand):
         # Run immediately if requested
         if options['run_now']:
             self.stdout.write("Running immediate pull...")
-            self._run_pull_task()
+            _run_pull_task()
 
         # Handle shutdown signals gracefully
         signal.signal(signal.SIGINT, self._shutdown)
@@ -114,75 +91,6 @@ class Command(BaseCommand):
             self.scheduler.start()
         except (KeyboardInterrupt, SystemExit):
             self.stdout.write("Scheduler stopped.")
-
-    def _run_pull_task(self):
-        """Execute the message trace pull task."""
-        # Check if pulls are enabled before running
-        _, _, enabled = self._get_interval_from_settings()
-        if not enabled:
-            logger.info("Scheduled pull skipped: pulls are disabled in settings")
-            self.stdout.write("Scheduled pull skipped (disabled in settings)")
-            return
-
-        hours, minutes, _ = self._get_interval_from_settings()
-        self.stdout.write(f"Starting scheduled pull (interval: every {hours}h {minutes}m)")
-        logger.info("Starting scheduled message trace pull")
-
-        try:
-            results = pull_all_tenants(
-                triggered_by='scheduler',
-                trigger_type='Scheduled'
-            )
-
-            total_pulled = sum(r.get('records_pulled', 0) for r in results)
-            total_new = sum(r.get('records_new', 0) for r in results)
-            total_updated = sum(r.get('records_updated', 0) for r in results)
-            failed = [r for r in results if r.get('status') == 'Failed']
-
-            if not failed:
-                msg = (
-                    f"Scheduled pull completed for {len(results)} tenant(s): "
-                    f"{total_pulled} pulled, "
-                    f"{total_new} new, "
-                    f"{total_updated} updated"
-                )
-                logger.info(msg)
-                self.stdout.write(self.style.SUCCESS(msg))
-            else:
-                msg = (
-                    f"Scheduled pull completed with {len(failed)} failure(s) "
-                    f"out of {len(results)} tenant(s): "
-                    f"{total_pulled} pulled, {total_new} new"
-                )
-                for f_result in failed:
-                    msg += f"\n  - {f_result.get('tenant_name', 'Unknown')}: {f_result.get('error_message', 'Unknown error')}"
-                logger.warning(msg)
-                self.stdout.write(self.style.WARNING(msg))
-
-        except Exception as e:
-            msg = f"Scheduler error: {str(e)}"
-            logger.exception(msg)
-            self.stdout.write(self.style.ERROR(msg))
-
-    def _check_settings_change(self):
-        """Check if settings have changed and reschedule if needed."""
-        hours, minutes, _ = self._get_interval_from_settings()
-
-        job = self.scheduler.get_job('message_trace_pull')
-        if job:
-            current_trigger = job.trigger
-            current_interval = current_trigger.interval
-            new_total_seconds = hours * 3600 + minutes * 60
-
-            if current_interval.total_seconds() != new_total_seconds and new_total_seconds > 0:
-                self.scheduler.reschedule_job(
-                    'message_trace_pull',
-                    trigger=IntervalTrigger(hours=hours, minutes=minutes)
-                )
-                logger.info(f"Rescheduled pulls to every {hours}h {minutes}m")
-                self.stdout.write(self.style.SUCCESS(
-                    f"Rescheduled pulls to every {hours}h {minutes}m"
-                ))
 
     def _shutdown(self, signum, frame):
         """Handle shutdown signals gracefully."""
