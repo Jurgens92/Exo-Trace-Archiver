@@ -155,6 +155,22 @@ if ! command -v pwsh &> /dev/null; then
     if command -v pwsh &> /dev/null; then
         log_success "PowerShell $(pwsh --version) installed"
 
+        # Install PSWSMan (required for Exchange Online on Linux)
+        log_info "Installing PSWSMan module (required for Exchange Online on Linux)..."
+        pwsh -NoProfile -NonInteractive -Command "
+            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+            Install-Module -Name PSWSMan -Scope AllUsers -Force
+        "
+        if [ $? -eq 0 ]; then
+            # Install-WSMan must run as root (which we are in the installer)
+            pwsh -NoProfile -NonInteractive -Command "Install-WSMan" 2>/dev/null
+            log_success "PSWSMan module installed and WSMan configured"
+        else
+            log_warning "Failed to install PSWSMan module."
+            log_warning "Exchange Online PowerShell may not work on Linux without it."
+            log_warning "You can install it manually: sudo pwsh -Command 'Install-Module PSWSMan -Force; Install-WSMan'"
+        fi
+
         # Install ExchangeOnlineManagement module for PowerShell
         log_info "Installing ExchangeOnlineManagement PowerShell module..."
         pwsh -NoProfile -NonInteractive -Command "

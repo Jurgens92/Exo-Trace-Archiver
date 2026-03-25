@@ -256,6 +256,7 @@ def pull_message_traces_for_tenant(
                     f"    3. Grant admin consent, then wait up to a few hours\n"
                     f"  Option B - Install PowerShell on Ubuntu:\n"
                     f"    sudo apt-get update && sudo apt-get install -y powershell\n"
+                    f"    sudo pwsh -Command 'Install-Module PSWSMan -Force; Install-WSMan'\n"
                     f"    pwsh -Command 'Install-Module ExchangeOnlineManagement -Force'\n"
                     f"Original error: {str(e)}"
                 )
