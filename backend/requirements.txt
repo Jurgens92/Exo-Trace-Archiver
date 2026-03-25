@@ -21,8 +21,14 @@ reportlab>=4.0,<5.0
 # Database (optional - for PostgreSQL)
 # psycopg2-binary>=2.9,<3.0
 
-# Production server (optional)
+# Production static file serving
+whitenoise>=6.5,<7.0
+
+# Production server (optional - Linux/macOS only)
 # gunicorn>=21.0,<23.0
+
+# Windows service support (optional)
+# pywin32>=306
 
 # Development/Testing
 # pytest>=7.4,<9.0
