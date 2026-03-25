@@ -374,22 +374,44 @@ if (-not (Test-Path $envFile)) {
 }
 
 # Run migrations
+# Note: Django may write warnings to stderr (e.g., scheduler starting in AppConfig.ready).
+# We temporarily relax error handling since $ErrorActionPreference=Stop treats any stderr as fatal.
 Write-Info "Running database migrations..."
-& $venvPython (Join-Path $BackendDir "manage.py") migrate --no-input 2>$null
+$ErrorActionPreference = "Continue"
+& $venvPython (Join-Path $BackendDir "manage.py") migrate --no-input 2>&1 | ForEach-Object {
+    if ($_ -is [System.Management.Automation.ErrorRecord]) {
+        # Suppress Django warnings written to stderr
+    } else {
+        Write-Host "  $_"
+    }
+}
+$ErrorActionPreference = "Stop"
 Write-Success "Database migrations complete."
 
 # Collect static files (includes the frontend build)
 Write-Info "Collecting static files..."
-& $venvPython (Join-Path $BackendDir "manage.py") collectstatic --no-input 2>$null
+$ErrorActionPreference = "Continue"
+& $venvPython (Join-Path $BackendDir "manage.py") collectstatic --no-input 2>&1 | ForEach-Object {
+    if ($_ -is [System.Management.Automation.ErrorRecord]) {
+        # Suppress Django warnings written to stderr
+    } else {
+        Write-Host "  $_"
+    }
+}
+$ErrorActionPreference = "Stop"
 Write-Success "Static files collected."
 
 # Check if superuser exists
 Write-Info "Checking for admin user..."
+$ErrorActionPreference = "Continue"
 $userCheck = & $venvPython (Join-Path $BackendDir "manage.py") shell -c "from django.contrib.auth.models import User; print(User.objects.filter(is_superuser=True).exists())" 2>$null
+$ErrorActionPreference = "Stop"
 if ($userCheck -ne "True") {
     Write-Host ""
     Write-Host "  No admin user found. Let's create one:" -ForegroundColor Yellow
+    $ErrorActionPreference = "Continue"
     & $venvPython (Join-Path $BackendDir "manage.py") createsuperuser
+    $ErrorActionPreference = "Stop"
 } else {
     Write-Success "Admin user already exists."
 }
