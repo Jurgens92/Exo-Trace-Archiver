@@ -28,7 +28,7 @@ from django.core.management.base import BaseCommand
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from traces.tasks import pull_message_traces
+from traces.tasks import pull_all_tenants
 
 logger = logging.getLogger('traces')
 
@@ -129,24 +129,35 @@ class Command(BaseCommand):
         logger.info("Starting scheduled message trace pull")
 
         try:
-            result = pull_message_traces(
+            results = pull_all_tenants(
                 triggered_by='scheduler',
                 trigger_type='Scheduled'
             )
 
-            if result['status'] == 'Success':
+            total_pulled = sum(r.get('records_pulled', 0) for r in results)
+            total_new = sum(r.get('records_new', 0) for r in results)
+            total_updated = sum(r.get('records_updated', 0) for r in results)
+            failed = [r for r in results if r.get('status') == 'Failed']
+
+            if not failed:
                 msg = (
-                    f"Scheduled pull completed: "
-                    f"{result['records_pulled']} pulled, "
-                    f"{result['records_new']} new, "
-                    f"{result['records_updated']} updated"
+                    f"Scheduled pull completed for {len(results)} tenant(s): "
+                    f"{total_pulled} pulled, "
+                    f"{total_new} new, "
+                    f"{total_updated} updated"
                 )
                 logger.info(msg)
                 self.stdout.write(self.style.SUCCESS(msg))
             else:
-                msg = f"Scheduled pull failed: {result['error_message']}"
-                logger.error(msg)
-                self.stdout.write(self.style.ERROR(msg))
+                msg = (
+                    f"Scheduled pull completed with {len(failed)} failure(s) "
+                    f"out of {len(results)} tenant(s): "
+                    f"{total_pulled} pulled, {total_new} new"
+                )
+                for f_result in failed:
+                    msg += f"\n  - {f_result.get('tenant_name', 'Unknown')}: {f_result.get('error_message', 'Unknown error')}"
+                logger.warning(msg)
+                self.stdout.write(self.style.WARNING(msg))
 
         except Exception as e:
             msg = f"Scheduler error: {str(e)}"
