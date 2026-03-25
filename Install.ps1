@@ -62,6 +62,7 @@ $PythonVersion = "3.12.8"
 $NodeVersion = "20.18.1"
 $NssmVersion = "2.24"
 $NssmUrl = "https://nssm.cc/release/nssm-$NssmVersion.zip"
+$NssmFallbackUrl = "https://nssm.cc/ci/nssm-$NssmVersion-101-g897c7ad.zip"
 $PythonUrl = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-amd64.exe"
 $NodeUrl = "https://nodejs.org/dist/v$NodeVersion/node-v$NodeVersion-x64.msi"
 
@@ -111,8 +112,10 @@ if ($Uninstall) {
     Write-Step "Uninstalling Exo-Trace-Archiver"
 
     # Stop and remove service
-    $nssmExe = Join-Path $NssmDir "nssm-$NssmVersion\win64\nssm.exe"
-    if (Test-Path $nssmExe) {
+    $nssmExe = Get-ChildItem -Path $NssmDir -Filter "nssm.exe" -Recurse -ErrorAction SilentlyContinue |
+               Where-Object { $_.DirectoryName -like "*win64*" } |
+               Select-Object -First 1 -ExpandProperty FullName
+    if ($nssmExe) {
         Write-Info "Stopping service '$ServiceName'..."
         & $nssmExe stop $ServiceName 2>$null
         Start-Sleep -Seconds 2
@@ -311,7 +314,7 @@ if (-not (Test-Path $venvPython)) {
 }
 
 Write-Info "Installing Python dependencies..."
-& $venvPip install --upgrade pip --quiet
+& $venvPython -m pip install --upgrade pip --quiet 2>$null
 & $venvPip install -r (Join-Path $BackendDir "requirements.txt") --quiet
 Write-Success "Python dependencies installed."
 
@@ -328,7 +331,12 @@ try {
     Write-Success "Node.js dependencies installed."
 
     Write-Info "Building React frontend (this may take a minute)..."
-    npm run build 2>$null
+    npm run build
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "Frontend build failed. Check the TypeScript errors above."
+        Write-Host "  You can fix the errors and re-run the installer to retry." -ForegroundColor Yellow
+        exit 1
+    }
     Write-Success "Frontend built successfully."
 } finally {
     Pop-Location
@@ -394,15 +402,51 @@ if (-not $SkipServiceInstall) {
     Write-Step "Step 7: Setting up Windows service"
 
     # Download and extract NSSM
-    $nssmExe = Join-Path $NssmDir "nssm-$NssmVersion\win64\nssm.exe"
-    if (-not (Test-Path $nssmExe)) {
+    # Look for nssm.exe in any subfolder (version in folder name may vary)
+    $nssmExe = Get-ChildItem -Path $NssmDir -Filter "nssm.exe" -Recurse -ErrorAction SilentlyContinue |
+               Where-Object { $_.DirectoryName -like "*win64*" } |
+               Select-Object -First 1 -ExpandProperty FullName
+
+    if (-not $nssmExe) {
         Write-Info "Downloading NSSM (Non-Sucking Service Manager)..."
         $nssmZip = Join-Path $env:TEMP "nssm.zip"
-        Invoke-WebRequest -Uri $NssmUrl -OutFile $nssmZip
+        $downloaded = $false
+
+        # Try primary URL, then fallback
+        foreach ($url in @($NssmUrl, $NssmFallbackUrl)) {
+            try {
+                Write-Info "Trying $url..."
+                Invoke-WebRequest -Uri $url -OutFile $nssmZip -TimeoutSec 30
+                $downloaded = $true
+                break
+            } catch {
+                Write-Info "Download failed: $($_.Exception.Message)"
+            }
+        }
+
+        if (-not $downloaded) {
+            Write-Fail "Could not download NSSM. Please download manually from https://nssm.cc/"
+            Write-Host "  Extract it to: $NssmDir" -ForegroundColor Yellow
+            Write-Host "  Then re-run this installer." -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "  Alternatively, run with -SkipServiceInstall to install without a service." -ForegroundColor Yellow
+            exit 1
+        }
 
         Write-Info "Extracting NSSM..."
         Expand-Archive -Path $nssmZip -DestinationPath $NssmDir -Force
         Remove-Item $nssmZip -ErrorAction SilentlyContinue
+
+        # Find the extracted nssm.exe
+        $nssmExe = Get-ChildItem -Path $NssmDir -Filter "nssm.exe" -Recurse -ErrorAction SilentlyContinue |
+                   Where-Object { $_.DirectoryName -like "*win64*" } |
+                   Select-Object -First 1 -ExpandProperty FullName
+
+        if (-not $nssmExe) {
+            Write-Fail "NSSM extracted but nssm.exe not found in $NssmDir"
+            exit 1
+        }
+
         Write-Success "NSSM installed."
     } else {
         Write-Success "NSSM already installed."
@@ -415,37 +459,12 @@ if (-not $SkipServiceInstall) {
     # Remove existing service if it exists
     & $nssmExe remove $ServiceName confirm 2>$null
 
-    # Create the service startup script
-    $startupScript = Join-Path $InstallPath "start-server.ps1"
-    $startupContent = @"
-# Exo-Trace-Archiver Server Startup Script
-# This script is run by NSSM as a Windows service.
-# It starts both the Django web server and the built-in scheduler.
-
-Set-Location "$BackendDir"
-
-# Activate virtual environment
-`$env:VIRTUAL_ENV = "$VenvDir"
-`$env:PATH = "$VenvDir\Scripts;`$env:PATH"
-
-# Start the scheduler in a background job
-`$schedulerJob = Start-Job -ScriptBlock {
-    Set-Location "$BackendDir"
-    & "$venvPython" manage.py run_scheduler
-}
-
-# Run Django server (foreground - NSSM monitors this process)
-& "$venvPython" manage.py runserver 0.0.0.0:$Port --noreload
-
-# If Django stops, also stop the scheduler
-Stop-Job `$schedulerJob -ErrorAction SilentlyContinue
-"@
-    Set-Content -Path $startupScript -Value $startupContent
-    Write-Success "Startup script created."
-
     # Install the service using NSSM
+    # Point NSSM directly at the venv python.exe — no intermediate script needed.
+    # The built-in APScheduler starts automatically when Django starts (in AppConfig.ready),
+    # so a single process handles both the web server and scheduled pulls.
     Write-Info "Registering Windows service '$ServiceName'..."
-    & $nssmExe install $ServiceName "powershell.exe" "-ExecutionPolicy Bypass -File `"$startupScript`""
+    & $nssmExe install $ServiceName $venvPython "manage.py runserver 0.0.0.0:$Port --noreload"
 
     # Configure the service
     & $nssmExe set $ServiceName Description "Exo-Trace-Archiver - Exchange Online Message Trace Log Archiver"
