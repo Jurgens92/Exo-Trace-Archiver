@@ -920,7 +920,7 @@ try {{
     foreach ($trace in $allTraces) {{
         $cleanTrace = [PSCustomObject]@{{
             MessageId = if ($trace.MessageId) {{ [regex]::Replace($trace.MessageId.ToString(), $controlCharPattern, '') }} else {{ '' }}
-            Received = $trace.Received
+            Received = if ($trace.Received) {{ $trace.Received.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") }} else {{ '' }}
             SenderAddress = if ($trace.SenderAddress) {{ [regex]::Replace($trace.SenderAddress.ToString(), $controlCharPattern, '') }} else {{ '' }}
             RecipientAddress = if ($trace.RecipientAddress) {{ [regex]::Replace($trace.RecipientAddress.ToString(), $controlCharPattern, '') }} else {{ '' }}
             Subject = if ($trace.Subject) {{ [regex]::Replace($trace.Subject.ToString(), $controlCharPattern, '') }} else {{ '' }}
@@ -1452,7 +1452,7 @@ try {{
     foreach ($trace in $allTraces) {{
         $cleanTrace = [PSCustomObject]@{{
             MessageId = if ($trace.MessageId) {{ [regex]::Replace($trace.MessageId.ToString(), $controlCharPattern, '') }} else {{ '' }}
-            Received = $trace.Received
+            Received = if ($trace.Received) {{ $trace.Received.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") }} else {{ '' }}
             SenderAddress = if ($trace.SenderAddress) {{ [regex]::Replace($trace.SenderAddress.ToString(), $controlCharPattern, '') }} else {{ '' }}
             RecipientAddress = if ($trace.RecipientAddress) {{ [regex]::Replace($trace.RecipientAddress.ToString(), $controlCharPattern, '') }} else {{ '' }}
             Subject = if ($trace.Subject) {{ [regex]::Replace($trace.Subject.ToString(), $controlCharPattern, '') }} else {{ '' }}

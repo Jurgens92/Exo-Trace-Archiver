@@ -18,6 +18,7 @@ For production deployments with high volume, consider:
 """
 
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -304,6 +305,46 @@ def pull_message_traces_for_tenant(
     return result
 
 
+def _parse_received_date(value) -> datetime | None:
+    """
+    Parse a received date value from various formats.
+
+    Handles:
+    - datetime objects (returned as-is)
+    - ISO 8601 strings (via Django's parse_datetime)
+    - WCF/JSON date format from Windows PowerShell 5.1: /Date(1616688600000)/
+    - Empty/None values (returns None)
+    """
+    if value is None or value == '':
+        return None
+
+    if isinstance(value, datetime):
+        return value
+
+    if not isinstance(value, str):
+        return None
+
+    # Try Django's standard parser first (handles ISO 8601)
+    result = parse_datetime(value)
+    if result is not None:
+        return result
+
+    # Handle WCF/JSON date format from PowerShell 5.1: /Date(1616688600000)/
+    # ConvertTo-Json in Windows PowerShell 5.1 serializes DateTime as this format
+    wfc_match = re.match(r'^/?Date\((-?\d+)\)/?$', value)
+    if wfc_match:
+        timestamp_ms = int(wfc_match.group(1))
+        return datetime.fromtimestamp(timestamp_ms / 1000.0, tz=timezone.utc)
+
+    # Try Python's fromisoformat as a last resort (handles more formats in 3.11+)
+    try:
+        return datetime.fromisoformat(value)
+    except (ValueError, AttributeError):
+        pass
+
+    return None
+
+
 def _store_traces_for_tenant(traces: list[dict], tenant, source: str = 'graph') -> tuple[int, int]:
     """
     Store message traces for a specific tenant in the database.
@@ -318,6 +359,7 @@ def _store_traces_for_tenant(traces: list[dict], tenant, source: str = 'graph') 
     """
     records_new = 0
     records_updated = 0
+    records_skipped = 0
     trace_date = timezone.now()
 
     # Get organization domains from tenant for direction detection
@@ -331,13 +373,16 @@ def _store_traces_for_tenant(traces: list[dict], tenant, source: str = 'graph') 
     for trace in traces:
         normalized = normalize_trace_data(trace, source)
 
-        # Parse received_date
-        received_date = normalized['received_date']
-        if isinstance(received_date, str):
-            received_date = parse_datetime(received_date)
-            if received_date is None:
-                logger.warning(f"Could not parse date: {normalized['received_date']}")
-                continue
+        # Parse received_date using robust parser
+        received_date = _parse_received_date(normalized['received_date'])
+        if received_date is None:
+            records_skipped += 1
+            if records_skipped <= 3:
+                logger.warning(
+                    f"Could not parse date for tenant {tenant.name}: "
+                    f"{normalized['received_date']!r} (type: {type(normalized['received_date']).__name__})"
+                )
+            continue
 
         if received_date.tzinfo is None:
             received_date = timezone.make_aware(received_date)
@@ -424,6 +469,12 @@ def _store_traces_for_tenant(traces: list[dict], tenant, source: str = 'graph') 
                         'event_data', 'raw_json', 'trace_date']
             )
         records_updated += len(traces_to_update)
+
+    if records_skipped > 0:
+        logger.warning(
+            f"Skipped {records_skipped}/{len(traces)} records for tenant {tenant.name} "
+            f"due to unparseable dates (source: {source})"
+        )
 
     return records_new, records_updated
 
@@ -630,6 +681,7 @@ def _store_traces(traces: list[dict], source: str = 'graph') -> tuple[int, int]:
     """
     records_new = 0
     records_updated = 0
+    records_skipped = 0
     trace_date = timezone.now()
 
     # Get organization domains for direction detection
@@ -644,13 +696,16 @@ def _store_traces(traces: list[dict], source: str = 'graph') -> tuple[int, int]:
     for trace in traces:
         normalized = normalize_trace_data(trace, source)
 
-        # Parse received_date
-        received_date = normalized['received_date']
-        if isinstance(received_date, str):
-            received_date = parse_datetime(received_date)
-            if received_date is None:
-                logger.warning(f"Could not parse date: {normalized['received_date']}")
-                continue
+        # Parse received_date using robust parser
+        received_date = _parse_received_date(normalized['received_date'])
+        if received_date is None:
+            records_skipped += 1
+            if records_skipped <= 3:
+                logger.warning(
+                    f"Could not parse date: {normalized['received_date']!r} "
+                    f"(type: {type(normalized['received_date']).__name__})"
+                )
+            continue
 
         if received_date.tzinfo is None:
             received_date = timezone.make_aware(received_date)
@@ -737,6 +792,12 @@ def _store_traces(traces: list[dict], source: str = 'graph') -> tuple[int, int]:
                         'event_data', 'raw_json', 'trace_date']
                 )
         records_updated += len(traces_to_update)
+
+    if records_skipped > 0:
+        logger.warning(
+            f"Skipped {records_skipped}/{len(traces)} records "
+            f"due to unparseable dates (source: {source})"
+        )
 
     return records_new, records_updated
 
