@@ -30,7 +30,7 @@ import { formatDateShort } from '@/lib/utils'
 import type { TraceFilterParams } from '@/api/types'
 import { exportSearchResultsPdf, downloadBlob } from '@/api/traces'
 
-const PAGE_SIZE = 50
+const DEFAULT_PAGE_SIZE = 50
 
 export function TracesPage() {
   const { selectedTenant } = useTenantContext()
@@ -40,7 +40,7 @@ export function TracesPage() {
   const getInitialFilters = (): TraceFilterParams => {
     const initial: TraceFilterParams = {
       page: 1,
-      page_size: PAGE_SIZE,
+      page_size: DEFAULT_PAGE_SIZE,
     }
     const status = searchParams.get('status')
     const direction = searchParams.get('direction')
@@ -128,7 +128,8 @@ export function TracesPage() {
     }
   }
 
-  const totalPages = data ? Math.ceil(data.count / PAGE_SIZE) : 0
+  const pageSize = filters.page_size || DEFAULT_PAGE_SIZE
+  const totalPages = data ? Math.ceil(data.count / pageSize) : 0
 
   if (isLoading && !data) return <LoadingPage />
 
@@ -331,8 +332,9 @@ export function TracesPage() {
                 currentPage={filters.page || 1}
                 totalPages={totalPages}
                 totalItems={data.count}
-                pageSize={PAGE_SIZE}
+                pageSize={pageSize}
                 onPageChange={(page) => setFilters((prev) => ({ ...prev, page }))}
+                onPageSizeChange={(newSize) => setFilters((prev) => ({ ...prev, page_size: newSize, page: 1 }))}
               />
             </>
           ) : (
