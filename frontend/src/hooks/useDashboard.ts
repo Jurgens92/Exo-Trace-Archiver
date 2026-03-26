@@ -5,10 +5,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { fetchDashboardStats, fetchConfig } from '@/api'
 
-export function useDashboard() {
+export function useDashboard(tenantId?: number | null) {
   return useQuery({
-    queryKey: ['dashboard'],
-    queryFn: fetchDashboardStats,
+    queryKey: ['dashboard', tenantId ?? 'all'],
+    queryFn: () => fetchDashboardStats(tenantId ?? undefined),
     refetchInterval: 1000 * 60 * 5, // Refresh every 5 minutes
   })
 }

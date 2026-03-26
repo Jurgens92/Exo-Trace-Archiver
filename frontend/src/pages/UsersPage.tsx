@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Users,
@@ -48,12 +48,18 @@ export function UsersPage() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
   const { data: usersData, isLoading, error, refetch } = useQuery({
-    queryKey: ['users', search],
-    queryFn: () => getUsers({ search: search || undefined }),
+    queryKey: ['users', debouncedSearch],
+    queryFn: () => getUsers({ search: debouncedSearch || undefined }),
     enabled: isAdmin,
   })
 

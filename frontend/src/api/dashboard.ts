@@ -6,10 +6,11 @@ import { apiClient } from './client'
 import type { DashboardStats, ConfigResponse, AuthTokenResponse } from './types'
 
 /**
- * Fetch dashboard statistics
+ * Fetch dashboard statistics, optionally filtered by tenant
  */
-export async function fetchDashboardStats(): Promise<DashboardStats> {
-  const response = await apiClient.get<DashboardStats>('/dashboard/')
+export async function fetchDashboardStats(tenantId?: number): Promise<DashboardStats> {
+  const params = tenantId ? { tenant: tenantId } : undefined
+  const response = await apiClient.get<DashboardStats>('/dashboard/', { params })
   return response.data
 }
 

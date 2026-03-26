@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { usePullHistory } from '@/hooks/usePullHistory'
+import { useTenantContext } from '@/hooks/useTenantContext'
 import { LoadingPage } from '@/components/LoadingSpinner'
 import { Pagination } from '@/components/Pagination'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -19,8 +20,19 @@ import { formatDate } from '@/lib/utils'
 const PAGE_SIZE = 25
 
 export function PullHistoryPage() {
+  const { selectedTenant } = useTenantContext()
   const [page, setPage] = useState(1)
-  const { data, isLoading, error, refetch } = usePullHistory({ page, page_size: PAGE_SIZE })
+
+  // Reset to page 1 when tenant changes
+  useEffect(() => {
+    setPage(1)
+  }, [selectedTenant])
+
+  const { data, isLoading, error, refetch } = usePullHistory({
+    page,
+    page_size: PAGE_SIZE,
+    tenant: selectedTenant?.id,
+  })
 
   const totalPages = data ? Math.ceil(data.count / PAGE_SIZE) : 0
 

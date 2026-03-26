@@ -12,12 +12,14 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useDashboard } from '@/hooks/useDashboard'
+import { useTenantContext } from '@/hooks/useTenantContext'
 import { LoadingPage } from '@/components/LoadingSpinner'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDate } from '@/lib/utils'
 
 export function Dashboard() {
-  const { data, isLoading, error, refetch } = useDashboard()
+  const { selectedTenant } = useTenantContext()
+  const { data, isLoading, error, refetch } = useDashboard(selectedTenant?.id)
 
   if (isLoading) return <LoadingPage />
 

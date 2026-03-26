@@ -1,5 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import React from 'react'
 import {
   Building2,
   Plus,
@@ -56,12 +57,18 @@ export function TenantsPage() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null)
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
   const { data: tenantsData, isLoading, error, refetch } = useQuery({
-    queryKey: ['tenants', search],
-    queryFn: () => getTenants({ search: search || undefined }),
+    queryKey: ['tenants', debouncedSearch],
+    queryFn: () => getTenants({ search: debouncedSearch || undefined }),
     enabled: isAdmin,
   })
 
@@ -895,8 +902,8 @@ function AuditLogSection() {
             </TableHeader>
             <TableBody>
               {logs.map((log) => (
-                <>
-                  <TableRow key={log.id} className={log.status === 'failure' ? 'bg-destructive/5' : ''}>
+                <React.Fragment key={log.id}>
+                  <TableRow className={log.status === 'failure' ? 'bg-destructive/5' : ''}>
                     <TableCell className="text-xs text-muted-foreground">
                       {new Date(log.created_at).toLocaleString()}
                     </TableCell>
@@ -936,7 +943,7 @@ function AuditLogSection() {
                     </TableCell>
                   </TableRow>
                   {expanded === log.id && (
-                    <TableRow key={`${log.id}-detail`}>
+                    <TableRow>
                       <TableCell colSpan={7} className="bg-muted/50">
                         <div className="space-y-3 py-2">
                           {log.error_message && (
@@ -967,7 +974,7 @@ function AuditLogSection() {
                       </TableCell>
                     </TableRow>
                   )}
-                </>
+                </React.Fragment>
               ))}
               {logs.length === 0 && (
                 <TableRow>

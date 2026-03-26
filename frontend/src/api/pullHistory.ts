@@ -20,6 +20,7 @@ export async function fetchPullHistory(params: {
   page_size?: number
   status?: string
   trigger_type?: string
+  tenant?: number
 } = {}): Promise<PaginatedResponse<PullHistory>> {
   const response = await apiClient.get<PaginatedResponse<PullHistory>>(
     '/pull-history/',
