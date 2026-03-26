@@ -26,6 +26,7 @@ import { useTenantContext } from '@/hooks/useTenantContext'
 import { LoadingPage } from '@/components/LoadingSpinner'
 import { Pagination } from '@/components/Pagination'
 import { StatusBadge, DirectionBadge } from '@/components/StatusBadge'
+import { useToast } from '@/components/ui/use-toast'
 import { formatDateShort } from '@/lib/utils'
 import type { TraceFilterParams } from '@/api/types'
 import { exportSearchResultsPdf, downloadBlob } from '@/api/traces'
@@ -65,6 +66,7 @@ export function TracesPage() {
   })
   const [searchInput, setSearchInput] = useState(searchParams.get('search') || '')
   const [isExporting, setIsExporting] = useState(false)
+  const { toast } = useToast()
 
   // Combine user filters with tenant filter
   const effectiveFilters = useMemo(() => {
@@ -121,8 +123,13 @@ export function TracesPage() {
       const blob = await exportSearchResultsPdf(effectiveFilters)
       const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
       downloadBlob(blob, `trace_search_results_${dateStr}.pdf`)
-    } catch (error) {
-      console.error('Failed to export PDF:', error)
+    } catch (err) {
+      console.error('Failed to export PDF:', err)
+      toast({
+        title: 'Export failed',
+        description: 'Failed to generate PDF. Please try again.',
+        variant: 'destructive',
+      })
     } finally {
       setIsExporting(false)
     }

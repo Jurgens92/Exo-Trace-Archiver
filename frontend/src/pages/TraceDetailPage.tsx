@@ -7,6 +7,7 @@ import { Separator } from '@/components/ui/separator'
 import { useTrace } from '@/hooks/useTraces'
 import { LoadingPage } from '@/components/LoadingSpinner'
 import { StatusBadge, DirectionBadge } from '@/components/StatusBadge'
+import { useToast } from '@/components/ui/use-toast'
 import { formatDate } from '@/lib/utils'
 import { exportTracePdf, downloadBlob } from '@/api/traces'
 
@@ -15,6 +16,7 @@ export function TraceDetailPage() {
   const { data: trace, isLoading, error } = useTrace(Number(id))
   const [copied, setCopied] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const { toast } = useToast()
 
   const copyMessageId = () => {
     if (trace?.message_id) {
@@ -33,8 +35,13 @@ export function TraceDetailPage() {
         ? new Date(trace.received_date).toISOString().split('T')[0].replace(/-/g, '')
         : 'unknown'
       downloadBlob(blob, `trace_detail_${id}_${dateStr}.pdf`)
-    } catch (error) {
-      console.error('Failed to export PDF:', error)
+    } catch (err) {
+      console.error('Failed to export PDF:', err)
+      toast({
+        title: 'Export failed',
+        description: 'Failed to generate PDF. Please try again.',
+        variant: 'destructive',
+      })
     } finally {
       setIsExporting(false)
     }

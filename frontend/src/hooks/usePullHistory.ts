@@ -10,6 +10,7 @@ export function usePullHistory(params: {
   page_size?: number
   status?: string
   trigger_type?: string
+  tenant?: number
 } = {}) {
   return useQuery({
     queryKey: ['pullHistory', params],
