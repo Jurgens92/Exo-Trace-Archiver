@@ -806,10 +806,15 @@ class PowerShellClient(BaseMS365Client):
                 ps_pwd = legacy_cert_password.replace("'", "''")
                 cert_import_cmd = f'''
 $thumbprint = "{settings.MS365_CERTIFICATE_THUMBPRINT}"
-$existingCert = Get-ChildItem -Path Cert:\\LocalMachine\\My -ErrorAction SilentlyContinue | Where-Object {{ $_.Thumbprint -eq $thumbprint }}
+$existingCert = Get-ChildItem -Path Cert:\\CurrentUser\\My -ErrorAction SilentlyContinue | Where-Object {{ $_.Thumbprint -eq $thumbprint }}
 if (-not $existingCert) {{
+    # Try CurrentUser store first (no admin required), fall back to LocalMachine
     $certPassword = ConvertTo-SecureString -String '{ps_pwd}' -AsPlainText -Force
-    Import-PfxCertificate -FilePath '{legacy_cert_path}' -CertStoreLocation Cert:\\LocalMachine\\My -Password $certPassword -Exportable | Out-Null
+    try {{
+        Import-PfxCertificate -FilePath '{legacy_cert_path}' -CertStoreLocation Cert:\\CurrentUser\\My -Password $certPassword -Exportable | Out-Null
+    }} catch {{
+        Import-PfxCertificate -FilePath '{legacy_cert_path}' -CertStoreLocation Cert:\\LocalMachine\\My -Password $certPassword -Exportable | Out-Null
+    }}
 }}
 '''
 
@@ -1337,10 +1342,15 @@ class TenantPowerShellClient(PowerShellClient):
                 cert_import_cmd = f'''
 # Import certificate into Windows cert store if not already present
 $thumbprint = "{self.tenant.certificate_thumbprint}"
-$existingCert = Get-ChildItem -Path Cert:\\LocalMachine\\My -ErrorAction SilentlyContinue | Where-Object {{ $_.Thumbprint -eq $thumbprint }}
+$existingCert = Get-ChildItem -Path Cert:\\CurrentUser\\My -ErrorAction SilentlyContinue | Where-Object {{ $_.Thumbprint -eq $thumbprint }}
 if (-not $existingCert) {{
+    # Try CurrentUser store first (no admin required), fall back to LocalMachine
     $certPassword = ConvertTo-SecureString -String '{ps_cert_password}' -AsPlainText -Force
-    Import-PfxCertificate -FilePath '{cert_path}' -CertStoreLocation Cert:\\LocalMachine\\My -Password $certPassword -Exportable | Out-Null
+    try {{
+        Import-PfxCertificate -FilePath '{cert_path}' -CertStoreLocation Cert:\\CurrentUser\\My -Password $certPassword -Exportable | Out-Null
+    }} catch {{
+        Import-PfxCertificate -FilePath '{cert_path}' -CertStoreLocation Cert:\\LocalMachine\\My -Password $certPassword -Exportable | Out-Null
+    }}
 }}
 '''
 
