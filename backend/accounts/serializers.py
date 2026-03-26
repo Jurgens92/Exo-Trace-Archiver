@@ -183,7 +183,7 @@ class TenantListSerializer(serializers.ModelSerializer):
         model = Tenant
         fields = [
             'id', 'name', 'tenant_id', 'organization', 'domains',
-            'auth_method', 'api_method', 'is_active',
+            'auth_method', 'api_method', 'is_active', 'initial_pull_done',
             'created_at', 'user_count'
         ]
 
@@ -213,7 +213,7 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             'organization', 'domains', 'auth_method', 'api_method',
             'certificate_path', 'certificate_thumbprint',
             'has_client_secret', 'has_certificate',
-            'is_active', 'created_at', 'updated_at',
+            'is_active', 'initial_pull_done', 'created_at', 'updated_at',
             'created_by', 'created_by_username', 'user_count'
         ]
         read_only_fields = ['created_at', 'updated_at', 'created_by']
@@ -532,9 +532,9 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         return value
 
     def validate_scheduled_pull_interval_hours(self, value):
-        """Validate interval hours is 0-168."""
-        if value < 0 or value > 168:
-            raise serializers.ValidationError("Interval hours must be between 0 and 168")
+        """Validate interval hours is 0-24 (max 24h since lookback is 1 day)."""
+        if value < 0 or value > 24:
+            raise serializers.ValidationError("Interval hours must be between 0 and 24. The scheduler cannot exceed 24 hours because the lookback period is 1 day.")
         return value
 
     def validate_scheduled_pull_interval_minutes(self, value):
@@ -544,11 +544,17 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
-        """Validate that the total interval is at least 1 minute."""
+        """Validate that the total interval is at least 1 minute and at most 24 hours."""
         hours = data.get('scheduled_pull_interval_hours', getattr(self.instance, 'scheduled_pull_interval_hours', 24) if self.instance else 24)
         minutes = data.get('scheduled_pull_interval_minutes', getattr(self.instance, 'scheduled_pull_interval_minutes', 0) if self.instance else 0)
         if hours == 0 and minutes == 0:
             raise serializers.ValidationError(
                 "Pull interval must be at least 1 minute."
+            )
+        total_minutes = hours * 60 + minutes
+        if total_minutes > 24 * 60:
+            raise serializers.ValidationError(
+                "Pull interval cannot exceed 24 hours. The scheduler lookback period is 1 day, "
+                "so intervals longer than 24 hours would miss data."
             )
         return data

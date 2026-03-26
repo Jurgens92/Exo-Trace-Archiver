@@ -1,8 +1,8 @@
-import { RefreshCw, Play, Check, X, AlertCircle, AlertTriangle, Save, Settings2 } from 'lucide-react'
+import { RefreshCw, Play, Check, X, AlertCircle, AlertTriangle, Save, Settings2, Download } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useConfig } from '@/hooks/useDashboard'
-import { useManualPull } from '@/hooks/usePullHistory'
+import { useManualPull, useInitialPull } from '@/hooks/usePullHistory'
 import { LoadingPage, LoadingSpinner } from '@/components/LoadingSpinner'
 import { useToast } from '@/components/ui/use-toast'
 import { useTenantContext } from '@/hooks/useTenantContext'
@@ -15,6 +15,7 @@ import { AppSettings } from '@/api/settings'
 export function SettingsPage() {
   const { data: config, isLoading, error, refetch } = useConfig()
   const manualPull = useManualPull()
+  const initialPull = useInitialPull()
   const { toast } = useToast()
   const { selectedTenant, hasTenantSelected } = useTenantContext()
 
@@ -72,6 +73,32 @@ export function SettingsPage() {
       toast({
         title: 'Pull failed',
         description: 'Failed to execute manual pull. Check the console for details.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleInitialPull = async () => {
+    if (!selectedTenant) {
+      toast({
+        title: 'No tenant selected',
+        description: 'Please select a tenant from the sidebar before running the initial pull.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      const result = await initialPull.mutateAsync({ tenant_id: selectedTenant.id })
+      toast({
+        title: 'Initial data pull completed',
+        description: `Pulled ${result.records_pulled} records (${result.records_new} new) for ${result.tenant_name} covering the last 10 days.`,
+      })
+    } catch (err: unknown) {
+      const errorDetail = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      toast({
+        title: 'Initial pull failed',
+        description: errorDetail || 'Failed to execute initial pull. Check the console for details.',
         variant: 'destructive',
       })
     }
@@ -262,10 +289,10 @@ export function SettingsPage() {
                         <input
                           type="number"
                           min="0"
-                          max="168"
+                          max="24"
                           value={localSettings.scheduled_pull_interval_hours}
                           onChange={(e) => {
-                            const value = Math.min(168, Math.max(0, parseInt(e.target.value) || 0))
+                            const value = Math.min(24, Math.max(0, parseInt(e.target.value) || 0))
                             setLocalSettings({
                               ...localSettings,
                               scheduled_pull_interval_hours: value,
@@ -274,7 +301,7 @@ export function SettingsPage() {
                           className="w-20 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-center"
                           disabled={!localSettings.scheduled_pull_enabled}
                         />
-                        <span className="text-sm text-muted-foreground">hours</span>
+                        <span className="text-sm text-muted-foreground">hours (max 24)</span>
                         <input
                           type="number"
                           min="0"
@@ -297,6 +324,7 @@ export function SettingsPage() {
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
                         How often to automatically pull message traces. Default: every 24 hours.
+                        Maximum: 24 hours (the scheduler looks back 1 day for new traces).
                       </p>
                     </label>
                   </div>
@@ -351,12 +379,12 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Manual Pull Card */}
+      {/* Data Pull Card */}
       <Card>
         <CardHeader>
-          <CardTitle>Manual Pull</CardTitle>
+          <CardTitle>Data Pull</CardTitle>
           <CardDescription>
-            Trigger an on-demand pull of message traces from Microsoft 365
+            Pull message traces from Microsoft 365 for the selected tenant
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -364,31 +392,88 @@ export function SettingsPage() {
             <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-md">
               <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
               <p className="text-sm text-amber-800 dark:text-amber-200">
-                Select a tenant from the sidebar to enable manual pulls.
+                Select a tenant from the sidebar to enable data pulls.
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              <div className="flex items-center gap-4">
-                <Button
-                  onClick={handleManualPull}
-                  disabled={manualPull.isPending}
-                >
-                  {manualPull.isPending ? (
-                    <>
-                      <LoadingSpinner size="sm" className="mr-2" />
-                      Pulling...
-                    </>
+            <div className="space-y-6">
+              {/* Initial Data Pull */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Initial Data Pull
+                </h3>
+                <div className="border-l-2 border-muted pl-4 space-y-3">
+                  {tenantDetails?.initial_pull_done ? (
+                    <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-md">
+                      <Check className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                      <p className="text-sm text-green-800 dark:text-green-200">
+                        Initial data pull has been completed for <span className="font-medium">{selectedTenant?.name}</span>.
+                        The scheduler will now handle incremental 1-day pulls.
+                      </p>
+                    </div>
                   ) : (
                     <>
-                      <Play className="h-4 w-4 mr-2" />
-                      Pull Now
+                      <div className="flex items-center gap-4">
+                        <Button
+                          onClick={handleInitialPull}
+                          disabled={initialPull.isPending}
+                          variant="default"
+                        >
+                          {initialPull.isPending ? (
+                            <>
+                              <LoadingSpinner size="sm" className="mr-2" />
+                              Pulling 10 days...
+                            </>
+                          ) : (
+                            <>
+                              <Download className="h-4 w-4 mr-2" />
+                              Pull Last 10 Days
+                            </>
+                          )}
+                        </Button>
+                        <p className="text-sm text-muted-foreground">
+                          One-time pull of the full available history for <span className="font-medium">{selectedTenant?.name}</span>
+                        </p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Exchange Online retains message traces for a maximum of 10 days.
+                        Run this once when setting up a new tenant to backfill all available data.
+                        After this, the scheduler handles daily incremental pulls.
+                      </p>
                     </>
                   )}
-                </Button>
-                <p className="text-sm text-muted-foreground">
-                  Pulls yesterday's message traces for <span className="font-medium">{selectedTenant?.name}</span>
-                </p>
+                </div>
+              </div>
+
+              {/* Manual Pull */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Manual Pull
+                </h3>
+                <div className="border-l-2 border-muted pl-4">
+                  <div className="flex items-center gap-4">
+                    <Button
+                      onClick={handleManualPull}
+                      disabled={manualPull.isPending}
+                      variant="outline"
+                    >
+                      {manualPull.isPending ? (
+                        <>
+                          <LoadingSpinner size="sm" className="mr-2" />
+                          Pulling...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-4 w-4 mr-2" />
+                          Pull Now
+                        </>
+                      )}
+                    </Button>
+                    <p className="text-sm text-muted-foreground">
+                      Pulls yesterday's message traces for <span className="font-medium">{selectedTenant?.name}</span>
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}

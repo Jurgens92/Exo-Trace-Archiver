@@ -8,6 +8,8 @@ import type {
   PullHistory,
   ManualPullRequest,
   ManualPullResponse,
+  InitialPullRequest,
+  InitialPullResponse,
 } from './types'
 
 /**
@@ -34,6 +36,19 @@ export async function triggerManualPull(
 ): Promise<ManualPullResponse> {
   const response = await apiClient.post<ManualPullResponse>(
     '/manual-pull/',
+    data
+  )
+  return response.data
+}
+
+/**
+ * Trigger an initial full historical pull (10 days)
+ */
+export async function triggerInitialPull(
+  data: InitialPullRequest
+): Promise<InitialPullResponse> {
+  const response = await apiClient.post<InitialPullResponse>(
+    '/initial-pull/',
     data
   )
   return response.data
