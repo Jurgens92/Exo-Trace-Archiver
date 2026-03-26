@@ -110,7 +110,7 @@ export function TracesPage() {
   }
 
   const clearFilters = () => {
-    setFilters({ page: 1, page_size: PAGE_SIZE })
+    setFilters({ page: 1, page_size: DEFAULT_PAGE_SIZE })
     setSearchInput('')
     setSearchParams({}, { replace: true })  // Clear URL params
   }
