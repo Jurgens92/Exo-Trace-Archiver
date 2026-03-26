@@ -3,7 +3,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchPullHistory, triggerManualPull, ManualPullRequest } from '@/api'
+import { fetchPullHistory, triggerManualPull, triggerInitialPull, ManualPullRequest, InitialPullRequest } from '@/api'
 
 export function usePullHistory(params: {
   page?: number
@@ -27,6 +27,20 @@ export function useManualPull() {
       queryClient.invalidateQueries({ queryKey: ['pullHistory'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       queryClient.invalidateQueries({ queryKey: ['traces'] })
+    },
+  })
+}
+
+export function useInitialPull() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: InitialPullRequest) => triggerInitialPull(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pullHistory'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['traces'] })
+      queryClient.invalidateQueries({ queryKey: ['tenant'] })
     },
   })
 }

@@ -153,6 +153,12 @@ class Tenant(models.Model):
         help_text="When domains were last discovered from Microsoft 365"
     )
 
+    # Initial data pull tracking
+    initial_pull_done = models.BooleanField(
+        default=False,
+        help_text="Whether the initial full historical data pull (10 days) has been completed"
+    )
+
     # Tenant status
     is_active = models.BooleanField(
         default=True,
@@ -384,8 +390,8 @@ class AppSettings(models.Model):
     )
     scheduled_pull_interval_hours = models.IntegerField(
         default=24,
-        validators=[MinValueValidator(0), MaxValueValidator(168)],
-        help_text="Hours component of the pull interval (0-168)"
+        validators=[MinValueValidator(0), MaxValueValidator(24)],
+        help_text="Hours component of the pull interval (0-24). Max 24 hours since lookback is 1 day."
     )
     scheduled_pull_interval_minutes = models.IntegerField(
         default=0,

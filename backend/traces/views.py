@@ -385,6 +385,105 @@ class ManualPullView(views.APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class InitialPullView(views.APIView):
+    """
+    Trigger an initial full historical data pull for a tenant.
+
+    POST /api/initial-pull/
+
+    Body:
+        {
+            "tenant_id": 1    // required: which tenant to pull from
+        }
+
+    This pulls the maximum available history (10 days) from Exchange Online.
+    It can only be run once per tenant (sets initial_pull_done=True).
+    After this, the scheduler handles incremental 1-day pulls.
+    """
+
+    permission_classes = [IsAuthenticated, IsAdminRole]
+    throttle_classes = [ManualPullRateThrottle]
+
+    def post(self, request):
+        """Trigger an initial full historical pull."""
+        tenant_id = request.data.get('tenant_id')
+        if not tenant_id:
+            return Response(
+                {'error': 'tenant_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            tenant = Tenant.objects.get(id=tenant_id)
+        except Tenant.DoesNotExist:
+            return Response(
+                {'error': 'Tenant not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if not user_is_admin(request.user):
+            accessible_ids = get_accessible_tenant_ids(request.user)
+            if tenant.id not in accessible_ids:
+                return Response(
+                    {'error': 'You do not have access to this tenant'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+        if tenant.initial_pull_done:
+            return Response(
+                {'error': 'Initial pull has already been completed for this tenant. Use manual pull for incremental pulls.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Pull 10 days of history (Exchange Online maximum retention)
+        now = timezone.now()
+        start_date = (now - timedelta(days=10)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        end_date = now
+
+        logger.info(
+            f"Initial data pull triggered by {request.user.username} "
+            f"for tenant {tenant.name} ({tenant.id}) "
+            f"for date range {start_date} to {end_date} (10-day backfill)"
+        )
+
+        from .tasks import pull_message_traces_for_tenant
+
+        try:
+            result = pull_message_traces_for_tenant(
+                tenant=tenant,
+                start_date=start_date,
+                end_date=end_date,
+                triggered_by=request.user.username,
+                trigger_type='Manual'
+            )
+
+            # Mark initial pull as done if successful
+            if result.get('status') == 'Success':
+                tenant.initial_pull_done = True
+                tenant.save(update_fields=['initial_pull_done'])
+
+            return Response({
+                'message': 'Initial data pull completed',
+                'tenant_id': tenant.id,
+                'tenant_name': tenant.name,
+                'pull_history_id': result.get('pull_history_id'),
+                'records_pulled': result.get('records_pulled', 0),
+                'records_new': result.get('records_new', 0),
+                'status': result.get('status', 'Unknown'),
+                'initial_pull_done': tenant.initial_pull_done,
+                'date_range': f"{start_date.isoformat()} to {end_date.isoformat()}",
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Initial pull failed: {str(e)}", exc_info=True)
+            return Response({
+                'error': 'Initial pull operation failed',
+                'detail': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class DashboardView(views.APIView):
     """
     Get dashboard statistics and summary data.

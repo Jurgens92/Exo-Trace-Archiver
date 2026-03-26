@@ -117,6 +117,26 @@ export interface ManualPullResponse {
   detail?: string
 }
 
+// Initial pull request
+export interface InitialPullRequest {
+  tenant_id: number
+}
+
+// Initial pull response
+export interface InitialPullResponse {
+  message: string
+  tenant_id: number
+  tenant_name: string
+  pull_history_id: number
+  records_pulled: number
+  records_new: number
+  status: string
+  initial_pull_done: boolean
+  date_range: string
+  error?: string
+  detail?: string
+}
+
 // Config response
 export interface ConfigResponse {
   multi_tenant: {
@@ -222,6 +242,7 @@ export interface Tenant {
   has_client_secret?: boolean
   has_certificate?: boolean
   is_active: boolean
+  initial_pull_done?: boolean
   created_at: string
   updated_at?: string
   created_by?: number
