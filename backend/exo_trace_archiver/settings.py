@@ -93,7 +93,7 @@ WSGI_APPLICATION = 'exo_trace_archiver.wsgi.application'
 # 1. Install psycopg2-binary
 # 2. Update DATABASE_URL in .env: postgres://user:password@localhost:5432/dbname
 DATABASES = {
-    'default': env.db('DATABASE_URL', default=f'sqlite:///{BASE_DIR / "db.sqlite3"}')
+    'default': env.db('DATABASE_URL', default=f'sqlite:///{(BASE_DIR / "db.sqlite3").as_posix()}')
 }
 
 # Password validation
